@@ -1,0 +1,6 @@
+@CityOfRecipes_backend_HostAddress = http://localhost:5186
+
+GET {{CityOfRecipes_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
