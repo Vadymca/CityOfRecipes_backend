@@ -16,6 +16,7 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<RecipeService>();
             builder.Services.AddSingleton<TagService>();
             builder.Services.AddSingleton<IngredientService>();
+            builder.Services.AddSingleton<IImageUploadService, ImageUploadService>();
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -34,6 +35,7 @@ namespace CityOfRecipes_backend
             var app = builder.Build();
             if (app.Environment.IsDevelopment())
             {
+                app.UseDeveloperExceptionPage();
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }

@@ -38,59 +38,66 @@ namespace CityOfRecipes_backend.Services
         public async Task RemoveAsync(string id) =>
             await _users.DeleteOneAsync(u => u.Id == id);
 
-        public async Task<List<(User User, int RecipeCount)>> GetPopularAuthorsAsync(int limit)
+        public async Task<List<(User User, int RecipeCount)>> GetPopularAuthorsAsync(int start, int limit)
         {
             var pipeline = new[]
             {
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
+                new BsonDocument
                 {
-                    { "from", "Recipes" },
-                    { "localField", "_id" },
-                    { "foreignField", "AuthorId" },
-                    { "as", "Recipes" }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$addFields", new BsonDocument
-                {
-                    { "RecipeCount", new BsonDocument
+                    { "$lookup", new BsonDocument
                         {
-                            { "$size", "$Recipes" }
+                            { "from", "Recipes" },
+                            { "localField", "_id" },
+                            { "foreignField", "AuthorId" },
+                            { "as", "Recipes" }
+                        }
+                    }
+                },
+                new BsonDocument
+                {
+                    { "$addFields", new BsonDocument
+                        {
+                            { "RecipeCount", new BsonDocument
+                                {
+                                    { "$size", "$Recipes" }
+                                }
+                            }
+                        }
+                    }
+                },
+                new BsonDocument
+                {
+                    { "$sort", new BsonDocument
+                        {
+                            { "Rating", -1 }
+                        }
+                    }
+                },
+                new BsonDocument
+                {
+                    { "$skip", start }
+                },
+                new BsonDocument
+                {
+                    { "$limit", limit }
+                },
+                new BsonDocument
+                {
+                    { "$project", new BsonDocument
+                        {
+                            { "Id", "$_id" },
+                            { "FirstName", 1 },
+                            { "LastName", 1 },
+                            { "ProfilePhotoUrl", 1 },
+                            { "Country", 1 },
+                            { "City", 1 },
+                            { "RegistrationDate", 1 },
+                            { "Rating", 1 },
+                            { "RecipeCount", 1 }
                         }
                     }
                 }
-            }
-        },
-        new BsonDocument
-        {
-            { "$sort", new BsonDocument
-                {
-                    { "RecipeCount", -1 }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$limit", limit }
-        },
-        new BsonDocument
-        {
-            { "$project", new BsonDocument
-                {
-                    { "Id", "$_id" },
-                    { "Login", 1 },
-                    { "Rating", 1 },
-                    { "About", 1 },
-                    { "ProfilePhotoUrl", 1 },
-                    { "RecipeCount", 1 }
-                }
-            }
-        }
-    };
+            };
 
             var results = await _users.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
@@ -99,10 +106,13 @@ namespace CityOfRecipes_backend.Services
                 var user = new User
                 {
                     Id = result["Id"].IsObjectId ? result["Id"].AsObjectId.ToString() : result["Id"].AsString,
-                    Login = result["Login"].AsString,
-                    Rating = result.Contains("Rating") ? result["Rating"].AsDouble : 0,
-                    About = result.Contains("About") ? result["About"].AsString : null,
-                    ProfilePhotoUrl = result.Contains("ProfilePhotoUrl") ? result["ProfilePhotoUrl"].AsString : null
+                    FirstName = result.Contains("FirstName") ? result["FirstName"].AsString : null,
+                    LastName = result.Contains("LastName") ? result["LastName"].AsString : null,
+                    ProfilePhotoUrl = result.Contains("ProfilePhotoUrl") ? result["ProfilePhotoUrl"].AsString : null,
+                    Country = result.Contains("Country") ? result["Country"].AsString : null,
+                    City = result.Contains("City") ? result["City"].AsString : null,
+                    RegistrationDate = result.Contains("RegistrationDate") ? result["RegistrationDate"].ToUniversalTime() : DateTime.MinValue,
+                    Rating = result.Contains("Rating") ? result["Rating"].AsDouble : 0
                 };
 
                 var recipeCount = result["RecipeCount"].AsInt32;

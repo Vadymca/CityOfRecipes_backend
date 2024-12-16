@@ -7,15 +7,11 @@ namespace CityOfRecipes_backend.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } = null!;
+        public string Id { get; set; } = string.Empty;
 
         [BsonElement("RoleId")]
         [BsonRequired]
         public int RoleId { get; set; }
-
-        [BsonElement("Login")]
-        [BsonRequired]
-        public string Login { get; set; } = string.Empty;
 
         [BsonElement("Email")]
         [BsonRequired]
@@ -30,6 +26,14 @@ namespace CityOfRecipes_backend.Models
         [BsonRequired]
         public DateTime RegistrationDate { get; set; } = DateTime.UtcNow;
 
+        [BsonElement("FirstName")]
+        [BsonRequired]
+        public string FirstName { get; set; } = string.Empty;
+
+        [BsonElement("LastName")]
+        [BsonRequired]
+        public string LastName { get; set; } = string.Empty;
+
         [BsonElement("About")]
         [BsonIgnoreIfNull]
         public string? About { get; set; }
@@ -42,6 +46,10 @@ namespace CityOfRecipes_backend.Models
         [BsonIgnoreIfNull]
         public int? CountryId { get; set; }
 
+        [BsonElement("Country")]
+        [BsonIgnoreIfNull]
+        public string? Country { get; set; }
+
         [BsonElement("City")]
         [BsonIgnoreIfNull]
         public string? City { get; set; }
@@ -53,6 +61,10 @@ namespace CityOfRecipes_backend.Models
         [BsonIgnoreIfNull]
         public ICollection<string>? FavoriteRecipes { get; set; }
 
+        [BsonElement("FavoriteAuthors")]
+        [BsonIgnoreIfNull]
+        public ICollection<string>? FavoriteAuthors { get; set; }
+
         [BsonElement("EmailConfirmed")]
         public bool EmailConfirmed { get; set; } = false;
 
@@ -61,18 +73,23 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("PermanentBan")]
         public bool PermanentBan { get; set; } = false;
+
         public void Validate()
         {
-            if (Login.Length > 50)
-                throw new ArgumentException("Логін не повинен перевищувати 50 символів.");
             if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(Email))
                 throw new ArgumentException("Формат електронної пошти невірний.");
             if (Password.Length < 6)
                 throw new ArgumentException("Пароль має бути не менше 6 символів.");
-            if (About.Length > 500)
-                throw new ArgumentException("Текст не має перевищувати 500 символів.");
-            if (City.Length > 100)
+            if (About?.Length > 500)
+                throw new ArgumentException("Текст 'About' не має перевищувати 500 символів.");
+            if (Country?.Length > 100)
+                throw new ArgumentException("Країна не повинно перевищувати 100 символів.");
+            if (City?.Length > 100)
                 throw new ArgumentException("Місто не повинно перевищувати 100 символів.");
+            if (string.IsNullOrWhiteSpace(FirstName))
+                throw new ArgumentException("Ім'я не може бути порожнім.");
+            if (string.IsNullOrWhiteSpace(LastName))
+                throw new ArgumentException("Прізвище не може бути порожнім.");
         }
     }
 }

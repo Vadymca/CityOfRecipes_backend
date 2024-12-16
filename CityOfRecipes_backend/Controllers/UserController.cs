@@ -66,19 +66,25 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet("popular-authors")]
-        public async Task<ActionResult<List<object>>> GetPopularAuthors([FromQuery] int limit = 10)
+        public async Task<ActionResult<List<object>>> GetPopularAuthors([FromQuery] int start = 0,[FromQuery] int limit = 4)
         {
+            if (start < 0)
+                return BadRequest("Параметр 'start' не може бути від'ємним.");
             if (limit <= 0)
                 return BadRequest("Параметр 'limit' має бути більшим за нуль.");
 
-            var popularAuthors = await _userService.GetPopularAuthorsAsync(limit);
+            var popularAuthors = await _userService.GetPopularAuthorsAsync(start, limit);
 
             return Ok(popularAuthors.Select(a => new
             {
-                a.User.Login,
+                a.User.Id,
+                a.User.FirstName,
+                a.User.LastName,
                 a.User.ProfilePhotoUrl,
-                a.User.About,
-                a.RecipeCount
+                a.User.Country,
+                a.User.City,
+                a.User.RegistrationDate,
+                a.User.Rating
             }));
         }
     }
