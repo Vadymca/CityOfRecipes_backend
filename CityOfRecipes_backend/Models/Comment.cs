@@ -7,7 +7,7 @@ namespace CityOfRecipes_backend.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } = null!;
+        public string Id { get; set; } = string.Empty;
 
         [BsonElement("RecipeId")]
         [BsonRepresentation(BsonType.ObjectId)]

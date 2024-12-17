@@ -10,10 +10,14 @@ namespace CityOfRecipes_backend.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
+        private readonly CountryService _countryService;
+        private readonly CityService _cityService;
 
-        public UserController(UserService userService)
+        public UserController(UserService userService, CountryService countryService, CityService cityService)
         {
             _userService = userService;
+            _countryService = countryService;
+            _cityService = cityService;
         }
 
         [HttpGet]
@@ -34,7 +38,20 @@ namespace CityOfRecipes_backend.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateUser(User newUser)
         {
+            // Ensure Country Exists
+            var country = await _countryService.EnsureCountryExistsAsync(newUser.Country);
+            newUser.CountryId = country.Id;
+
+            // Ensure City Exists
+            if (!string.IsNullOrWhiteSpace(newUser.City))
+            {
+                var city = await _cityService.EnsureCityExistsAsync(newUser.City, country.Id);
+                newUser.City = city.CityName;
+            }
+
+            newUser.Validate();
             await _userService.CreateAsync(newUser);
+
             return CreatedAtAction(nameof(GetUserById), new { id = newUser.Id }, newUser);
         }
 
@@ -46,7 +63,19 @@ namespace CityOfRecipes_backend.Controllers
             if (user is null)
                 return NotFound();
 
+            // Ensure Country Exists
+            var country = await _countryService.EnsureCountryExistsAsync(updatedUser.Country);
+            updatedUser.CountryId = country.Id;
+
+            // Ensure City Exists
+            if (!string.IsNullOrWhiteSpace(updatedUser.City))
+            {
+                var city = await _cityService.EnsureCityExistsAsync(updatedUser.City, country.Id);
+                updatedUser.City = city.CityName;
+            }
+
             updatedUser.Id = user.Id;
+            updatedUser.Validate();
             await _userService.UpdateAsync(id, updatedUser);
 
             return NoContent();

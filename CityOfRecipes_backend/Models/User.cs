@@ -40,11 +40,11 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("ProfilePhotoUrl")]
         [BsonIgnoreIfNull]
-        public string? ProfilePhotoUrl { get; set; }
+        public string ProfilePhotoUrl { get; set; }
 
         [BsonElement("CountryId")]
         [BsonIgnoreIfNull]
-        public int? CountryId { get; set; }
+        public string CountryId { get; set; } = string.Empty;
 
         [BsonElement("Country")]
         [BsonIgnoreIfNull]

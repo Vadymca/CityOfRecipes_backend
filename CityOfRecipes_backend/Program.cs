@@ -16,7 +16,9 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<RecipeService>();
             builder.Services.AddSingleton<TagService>();
             builder.Services.AddSingleton<IngredientService>();
+            builder.Services.AddSingleton<CityService>();
             builder.Services.AddSingleton<IImageUploadService, ImageUploadService>();
+            builder.Services.AddSingleton<CountryService>();
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
