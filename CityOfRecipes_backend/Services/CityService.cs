@@ -1,5 +1,6 @@
 ﻿using CityOfRecipes_backend.Models;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace CityOfRecipes_backend.Services

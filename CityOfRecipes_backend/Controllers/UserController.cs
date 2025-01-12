@@ -1,6 +1,8 @@
-﻿using CityOfRecipes_backend.Models;
+﻿using CityOfRecipes_backend.DTOs;
+using CityOfRecipes_backend.Models;
 using CityOfRecipes_backend.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CityOfRecipes_backend.Controllers
@@ -21,81 +23,95 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<User>>> GetAllUsers() =>
-            await _userService.GetAsync();
-
-        [HttpGet("{id:length(24)}")]
-        public async Task<ActionResult<User>> GetUserById(string id)
+        public async Task<ActionResult<List<AuthorDto>>> GetAllUsers([FromQuery] int start = 0, [FromQuery] int limit = 10)
         {
-            var user = await _userService.GetByIdAsync(id);
+            if (start < 0)
+                return BadRequest("Параметр 'start' не може бути від'ємним.");
+            if (limit <= 0)
+                return BadRequest("Параметр 'limit' має бути більшим за нуль.");
 
-            if (user is null)
-                return NotFound();
+            var users = await _userService.GetAsync(start, limit);
 
-            return user;
+            var result = users.Select(x => x).ToList();
+
+            return Ok(result);
         }
+    
 
-        [HttpPost]
-        public async Task<IActionResult> CreateUser(User newUser)
-        {
-            // Ensure Country Exists
-            var country = await _countryService.EnsureCountryExistsAsync(newUser.Country);
-            newUser.CountryId = country.Id;
+        //[HttpGet("{id:length(24)}")]
+        //public async Task<ActionResult<User>> GetUserById(string id)
+        //{
+        //    var user = await _userService.GetByIdAsync(id);
 
-            // Ensure City Exists
-            if (!string.IsNullOrWhiteSpace(newUser.City))
-            {
-                var city = await _cityService.EnsureCityExistsAsync(newUser.City, country.Id);
-                newUser.City = city.CityName;
-            }
+        //    if (user is null)
+        //        return NotFound();
 
-            newUser.Validate();
-            await _userService.CreateAsync(newUser);
+        //    return Ok(user);
+        //}
 
-            return CreatedAtAction(nameof(GetUserById), new { id = newUser.Id }, newUser);
-        }
+        //[HttpPost]
+        //public async Task<IActionResult> CreateUser(User newUser)
+        //{
 
-        [HttpPut("{id:length(24)}")]
-        public async Task<IActionResult> UpdateUser(string id, User updatedUser)
-        {
-            var user = await _userService.GetByIdAsync(id);
+        //    // Ensure City Exists
+        //    if (!string.IsNullOrEmpty(newUser.CityId))
+        //    {
+        //        var city = await _cityService.GetByIdAsync(newUser.CityId);
 
-            if (user is null)
-                return NotFound();
+        //        if (city is null || city.CountryId != newUser.CountryId)
+        //            return BadRequest("Місто не знайдено або не належить до вибраної країни.");
+        //    }
 
-            // Ensure Country Exists
-            var country = await _countryService.EnsureCountryExistsAsync(updatedUser.Country);
-            updatedUser.CountryId = country.Id;
+        //    await _userService.CreateAsync(newUser);
 
-            // Ensure City Exists
-            if (!string.IsNullOrWhiteSpace(updatedUser.City))
-            {
-                var city = await _cityService.EnsureCityExistsAsync(updatedUser.City, country.Id);
-                updatedUser.City = city.CityName;
-            }
+        //    return CreatedAtAction(nameof(GetUserById), new { id = newUser.Id }, newUser);
+        //}
 
-            updatedUser.Id = user.Id;
-            updatedUser.Validate();
-            await _userService.UpdateAsync(id, updatedUser);
+        //[HttpPut("{id:length(24)}")]
+        //public async Task<IActionResult> UpdateUser(string id, User updatedUser)
+        //{
+        //    var user = await _userService.GetByIdAsync(id);
 
-            return NoContent();
-        }
+        //    if (user is null)
+        //        return NotFound();
 
-        [HttpDelete("{id:length(24)}")]
-        public async Task<IActionResult> DeleteUser(string id)
-        {
-            var user = await _userService.GetByIdAsync(id);
+        //    // Ensure Country Exists
+        //    var country = await _countryService.GetByIdAsync(updatedUser.CountryId);
 
-            if (user is null)
-                return NotFound();
+        //    if (country is null)
+        //        return BadRequest("Країна не знайдена.");
 
-            await _userService.RemoveAsync(id);
+        //    // Ensure City Exists
+        //    if (updatedUser.CityId != null)
+        //    {
+        //        var city = await _cityService.GetByIdAsync(updatedUser.CityId);
 
-            return NoContent();
-        }
+        //        if (city is null || city.CountryId != updatedUser.CountryId)
+        //            return BadRequest("Місто не знайдено або не належить до вибраної країни.");
+        //    }
+
+        //    updatedUser.Id = user.Id;
+
+        //    await _userService.UpdateAsync(id, updatedUser);
+
+        //    return NoContent();
+        //}
+
+        //[HttpDelete("{id:length(24)}")]
+        //public async Task<IActionResult> DeleteUser(string id)
+        //{
+        //    var user = await _userService.GetByIdAsync(id);
+
+        //    if (user is null)
+        //        return NotFound();
+
+        //    await _userService.RemoveAsync(id);
+
+        //    return NoContent();
+        //}
 
         [HttpGet("popular-authors")]
-        public async Task<ActionResult<List<object>>> GetPopularAuthors([FromQuery] int start = 0,[FromQuery] int limit = 4)
+        public async Task<ActionResult<List<AuthorDto>>> GetPopularAuthors([FromQuery] int start = 0, [FromQuery] int limit = 4)
         {
             if (start < 0)
                 return BadRequest("Параметр 'start' не може бути від'ємним.");
@@ -104,17 +120,9 @@ namespace CityOfRecipes_backend.Controllers
 
             var popularAuthors = await _userService.GetPopularAuthorsAsync(start, limit);
 
-            return Ok(popularAuthors.Select(a => new
-            {
-                a.User.Id,
-                a.User.FirstName,
-                a.User.LastName,
-                a.User.ProfilePhotoUrl,
-                a.User.Country,
-                a.User.City,
-                a.User.RegistrationDate,
-                a.User.Rating
-            }));
+            var result = popularAuthors.Select(x => x).ToList();
+
+            return Ok(result);
         }
     }
 }

@@ -14,5 +14,7 @@ namespace CityOfRecipes_backend.Services
         }
         public IMongoCollection<T> GetCollection<T>(string name) =>
         _database.GetCollection<T>(name);
+
+        public IMongoCollection<User> Users => _database.GetCollection<User>("Users");
     }
 }

@@ -1,5 +1,7 @@
 using CityOfRecipes_backend.Models;
 using CityOfRecipes_backend.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CityOfRecipes_backend
 {
@@ -19,6 +21,21 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<CityService>();
             builder.Services.AddSingleton<IImageUploadService, ImageUploadService>();
             builder.Services.AddSingleton<CountryService>();
+            builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            }).AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Secret"])),
+                    ValidateIssuer = false,
+                    ValidateAudience = false
+                };
+            });
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -44,6 +61,7 @@ namespace CityOfRecipes_backend
 
             app.UseHttpsRedirection();
             app.UseCors("*");
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();

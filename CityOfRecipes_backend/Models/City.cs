@@ -13,8 +13,8 @@ namespace CityOfRecipes_backend.Models
         [BsonRequired]
         public string CityName { get; set; } = string.Empty;
 
-        [BsonRepresentation(BsonType.ObjectId)]
         [BsonElement("CountryId")]
+        [BsonRepresentation(BsonType.ObjectId)]
         public string CountryId { get; set; } = string.Empty;
 
         public void Validate()
