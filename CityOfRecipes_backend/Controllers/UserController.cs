@@ -73,6 +73,30 @@ namespace CityOfRecipes_backend.Controllers
             return Ok(result);
         }
 
+        [HttpGet("aboutme")]
+        [Authorize]
+        public async Task<IActionResult> GetAboutMe()
+        {
+            try
+            {
+                // Отримуємо Id користувача з токена
+                var userId = User.Claims.FirstOrDefault(c => c.Type == "id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized("Неможливо отримати ідентифікатор користувача.");
+
+                // Викликаємо сервіс для отримання інформації
+                var user = await _userService.GetAboutMeAsync(userId);
+                if (user == null)
+                    return NotFound("Користувача не знайдено.");
+
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
         [HttpPut("{userId:length(24)}")]
         [Authorize]
         public async Task<IActionResult> UpdateUser(string userId, [FromBody] UserDto updatedUser)

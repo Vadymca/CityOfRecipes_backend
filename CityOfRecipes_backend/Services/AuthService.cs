@@ -20,7 +20,7 @@ namespace CityOfRecipes_backend.Services
         public async Task RegisterAsync(string email, string password)
         {
             var existingUser = await _dbContext.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (existingUser != null) throw new Exception("User already exists");
+            if (existingUser != null) throw new Exception("Користувач уже існує");
 
             var passwordHash = HashPassword(password);
             var user = new User { Email = email, PasswordHash = passwordHash };

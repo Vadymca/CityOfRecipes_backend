@@ -219,6 +219,53 @@ namespace CityOfRecipes_backend.Services
             return result;
         }
 
+        public async Task<UserDto?> GetAboutMeAsync(string userId)
+        {
+            // Перевіряємо, чи валідний ObjectId
+            if (!ObjectId.TryParse(userId, out _))
+                throw new ArgumentException("Невірний формат UserId.");
+
+            // Шукаємо користувача за Id
+            var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (user == null)
+                throw new KeyNotFoundException("Користувача не знайдено.");
+
+            // Отримуємо місто користувача
+            var city = await _cities.Find(c => c.Id == user.CityId).FirstOrDefaultAsync();
+            var cityName = city?.CityName ?? "Невідоме місто";
+
+            // Отримуємо країну користувача
+            var country = city != null ? await _countries.Find(c => c.Id == city.CountryId).FirstOrDefaultAsync() : null;
+            var countryName = country?.CountryName ?? "Невідома країна";
+
+            // Повертаємо DTO з інформацією про користувача
+            return new UserDto
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                About = user.About,
+                ProfilePhotoUrl = user.ProfilePhotoUrl,
+                City = cityName,
+                Country = countryName,
+                FavoriteRecipes = user.FavoriteRecipes?.Select(r => new RecipeDto
+                {
+                    Id = r.Id,
+                    Name = r.RecipeName,
+                    PreviewImageUrl = r.PhotoUrl,
+                }).ToList() ?? new List<RecipeDto>(),
+                FavoriteAuthors = user.FavoriteAuthors?.Select(a => new AuthorDto
+                {
+                    Id = a.Id,
+                    FirstName = a.FirstName,
+                    LastName = a.LastName,
+                    ProfilePhotoUrl = a.ProfilePhotoUrl,
+                    Rating = a.Rating,
+                }).ToList() ?? new List<AuthorDto>()
+            };
+        }
+
         public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
         {
             if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(updatedUser.City))
