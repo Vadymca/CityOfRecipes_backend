@@ -12,12 +12,12 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("CategoryId")]
         [BsonRepresentation(BsonType.ObjectId)]
-        [BsonRequired]
+        
         public string CategoryId { get; set; } = null!;
 
         [BsonElement("AuthorId")]
         [BsonRepresentation(BsonType.ObjectId)]
-        [BsonRequired]
+       
         public string AuthorId { get; set; } = null!;
 
         [BsonElement("CountryOfOriginId")]
@@ -29,7 +29,7 @@ namespace CityOfRecipes_backend.Models
         public string RecipeName { get; set; } = null!;
 
         [BsonElement("CreatedAt")]
-        [BsonRequired]
+      
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         [BsonElement("IngredientsText")]
@@ -39,7 +39,7 @@ namespace CityOfRecipes_backend.Models
         public List<string> Ingredients { get; set; } = new(); // Оброблені інгредієнти
 
         [BsonElement("InstructionsText")]
-        [BsonRequired]
+       
         public string InstructionsText { get; set; } = null!;
 
         [BsonElement("VideoUrl")]
