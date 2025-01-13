@@ -264,7 +264,7 @@ namespace CityOfRecipes_backend.Services
             {
                 Id = userId,
                 Email = updatedUser.Email,
-                Password = hashedPassword, // Повертаємо хеш пароля (опціонально)
+                Password = updatedUser.Password, 
                 FirstName = updatedUser.FirstName,
                 LastName = updatedUser.LastName,
                 About = updatedUser.About,
