@@ -19,7 +19,7 @@ namespace CityOfRecipes_backend.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterDto request)
         {
             await _authService.RegisterAsync(request.Email, request.Password);
-            return Ok("Registration successful");
+            return Ok("Реєстрація успішна");
         }
 
         [HttpPost("login")]

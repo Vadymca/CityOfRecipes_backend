@@ -23,7 +23,7 @@ namespace CityOfRecipes_backend.Services
             if (existingUser != null) throw new Exception("User already exists");
 
             var passwordHash = HashPassword(password);
-            var user = new User { Email = email, Password = passwordHash };
+            var user = new User { Email = email, PasswordHash = passwordHash };
 
             await _dbContext.Users.InsertOneAsync(user);
         }
@@ -31,7 +31,7 @@ namespace CityOfRecipes_backend.Services
         public async Task<string> AuthenticateAsync(string email, string password)
         {
             var user = await _dbContext.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (user == null || !VerifyPassword(password, user.Password))
+            if (user == null || !VerifyPassword(password, user.PasswordHash))
                 throw new Exception("Invalid credentials");
 
             return GenerateJwtToken(user);
@@ -39,7 +39,7 @@ namespace CityOfRecipes_backend.Services
 
         private string HashPassword(string password)
         {
-            if (string.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password), "Password cannot be null or empty.");
+            if (string.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password), "Пароль не може бути пустим або порожнім.");
 
             using var sha256 = SHA256.Create();
             var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
@@ -59,7 +59,7 @@ namespace CityOfRecipes_backend.Services
                 new System.Security.Claims.Claim("id", user.Id.ToString()),
                 new System.Security.Claims.Claim("email", user.Email)
             }),
-                Expires = DateTime.UtcNow.AddHours(1),
+                Expires = DateTime.UtcNow.AddDays(30),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);

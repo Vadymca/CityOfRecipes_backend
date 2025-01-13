@@ -1,6 +1,7 @@
 ﻿using CityOfRecipes_backend.DTOs;
 using CityOfRecipes_backend.Models;
 using CityOfRecipes_backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -12,14 +13,10 @@ namespace CityOfRecipes_backend.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
-        private readonly CountryService _countryService;
-        private readonly CityService _cityService;
 
-        public UserController(UserService userService, CountryService countryService, CityService cityService)
+        public UserController(UserService userService)
         {
             _userService = userService;
-            _countryService = countryService;
-            _cityService = cityService;
         }
 
         [HttpGet]
@@ -36,79 +33,30 @@ namespace CityOfRecipes_backend.Controllers
 
             return Ok(result);
         }
-    
 
-        //[HttpGet("{id:length(24)}")]
-        //public async Task<ActionResult<User>> GetUserById(string id)
-        //{
-        //    var user = await _userService.GetByIdAsync(id);
 
-        //    if (user is null)
-        //        return NotFound();
+        [HttpGet("{id:length(24)}")]
+        public async Task<IActionResult> GetById(string id)
+        {
+            try
+            {
+                var author = await _userService.GetByIdAsync(id);
+                if (author == null)
+                {
+                    return NotFound($"Автора с ID {id} не знайдено");
+                }
 
-        //    return Ok(user);
-        //}
-
-        //[HttpPost]
-        //public async Task<IActionResult> CreateUser(User newUser)
-        //{
-
-        //    // Ensure City Exists
-        //    if (!string.IsNullOrEmpty(newUser.CityId))
-        //    {
-        //        var city = await _cityService.GetByIdAsync(newUser.CityId);
-
-        //        if (city is null || city.CountryId != newUser.CountryId)
-        //            return BadRequest("Місто не знайдено або не належить до вибраної країни.");
-        //    }
-
-        //    await _userService.CreateAsync(newUser);
-
-        //    return CreatedAtAction(nameof(GetUserById), new { id = newUser.Id }, newUser);
-        //}
-
-        //[HttpPut("{id:length(24)}")]
-        //public async Task<IActionResult> UpdateUser(string id, User updatedUser)
-        //{
-        //    var user = await _userService.GetByIdAsync(id);
-
-        //    if (user is null)
-        //        return NotFound();
-
-        //    // Ensure Country Exists
-        //    var country = await _countryService.GetByIdAsync(updatedUser.CountryId);
-
-        //    if (country is null)
-        //        return BadRequest("Країна не знайдена.");
-
-        //    // Ensure City Exists
-        //    if (updatedUser.CityId != null)
-        //    {
-        //        var city = await _cityService.GetByIdAsync(updatedUser.CityId);
-
-        //        if (city is null || city.CountryId != updatedUser.CountryId)
-        //            return BadRequest("Місто не знайдено або не належить до вибраної країни.");
-        //    }
-
-        //    updatedUser.Id = user.Id;
-
-        //    await _userService.UpdateAsync(id, updatedUser);
-
-        //    return NoContent();
-        //}
-
-        //[HttpDelete("{id:length(24)}")]
-        //public async Task<IActionResult> DeleteUser(string id)
-        //{
-        //    var user = await _userService.GetByIdAsync(id);
-
-        //    if (user is null)
-        //        return NotFound();
-
-        //    await _userService.RemoveAsync(id);
-
-        //    return NoContent();
-        //}
+                return Ok(author);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Внутрішня помилка сервера: {ex.Message}");
+            }
+        }
 
         [HttpGet("popular-authors")]
         public async Task<ActionResult<List<AuthorDto>>> GetPopularAuthors([FromQuery] int start = 0, [FromQuery] int limit = 4)
@@ -124,5 +72,50 @@ namespace CityOfRecipes_backend.Controllers
 
             return Ok(result);
         }
+
+        [HttpPut("{userId:length(24)}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateUser(string userId, [FromBody] UserDto updatedUser)
+        {
+            if (string.IsNullOrEmpty(userId) || updatedUser == null)
+            {
+                return BadRequest("Необхідні ідентифікатор користувача та оновлені дані користувача.");
+            }
+
+            try
+            {
+                var updatedUserDto = await _userService.UpdateAsync(userId, updatedUser);
+
+                if (updatedUserDto == null)
+                {
+                    return NotFound($"Користувач з ID {userId} не знайдено.");
+                }
+
+                return Ok(updatedUserDto);
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+            }
+        }
+
+        [HttpDelete("{id:length(24)}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            var user = await _userService.GetByIdAsync(id);
+
+            if (user is null)
+                return NotFound();
+
+            await _userService.RemoveAsync(id);
+
+            return NoContent();
+        }
+
     }
 }

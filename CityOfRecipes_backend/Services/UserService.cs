@@ -4,18 +4,23 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using System.Security.Cryptography;
 
 namespace CityOfRecipes_backend.Services
 {
     public class UserService
     {
         private readonly IMongoCollection<User> _users;
+        private readonly IMongoCollection<City> _cities;
+        private readonly IMongoCollection<Country> _countries;
 
         public UserService(IOptions<MongoDBSettings> mongoSettings)
         {
             var client = new MongoClient(mongoSettings.Value.ConnectionString);
             var database = client.GetDatabase(mongoSettings.Value.DatabaseName);
             _users = database.GetCollection<User>("Users");
+            _cities = database.GetCollection<City>("Cities");
+            _countries = database.GetCollection<Country>("Countries");
         }
 
         public async Task<List<AuthorDto>> GetAsync(int start, int limit)
@@ -124,22 +129,161 @@ namespace CityOfRecipes_backend.Services
             }).ToList();
         }
 
+        public async Task<AuthorDto?> GetByIdAsync(string authorId)
+        {
+            if (!ObjectId.TryParse(authorId, out _))
+            {
+                throw new ArgumentException("Invalid author ID format");
+            }
 
-        //    public async Task<User?> GetByIdAsync(string id) =>
-        //        await _users.Find(u => u.Id == id).FirstOrDefaultAsync();
+            var pipeline = new[]
+            {
+        // Фільтр за Id
+        new BsonDocument
+        {
+            { "$match", new BsonDocument
+                {
+                    { "_id", new ObjectId(authorId) }
+                }
+            }
+        },
+        // Зв'язок з містами
+        new BsonDocument
+        {
+            { "$lookup", new BsonDocument
+                {
+                    { "from", "Cities" },
+                    { "localField", "CityId" },
+                    { "foreignField", "_id" },
+                    { "as", "CityDetails" }
+                }
+            }
+        },
+        new BsonDocument
+        {
+            { "$unwind", new BsonDocument
+                {
+                    { "path", "$CityDetails" },
+                    { "preserveNullAndEmptyArrays", true }
+                }
+            }
+        },
+        // Зв'язок з країнами через місто
+        new BsonDocument
+        {
+            { "$lookup", new BsonDocument
+                {
+                    { "from", "Countries" },
+                    { "localField", "CityDetails.CountryId" },
+                    { "foreignField", "_id" },
+                    { "as", "CountryDetails" }
+                }
+            }
+        },
+        new BsonDocument
+        {
+            { "$unwind", new BsonDocument
+                {
+                    { "path", "$CountryDetails" },
+                    { "preserveNullAndEmptyArrays", true }
+                }
+            }
+        },
+        // Вибір необхідних полів
+        new BsonDocument
+        {
+            { "$project", new BsonDocument
+                {
+                    { "_id", 1 }, 
+                    { "FirstName", 1 },
+                    { "LastName", 1 },
+                    { "ProfilePhotoUrl", 1 },
+                    { "City", new BsonDocument
+                        {
+                            { "$ifNull", new BsonArray { "$CityDetails.CityName", "Невідоме місто" } }
+                        }
+                    },
+                    { "Country", new BsonDocument
+                        {
+                            { "$ifNull", new BsonArray { "$CountryDetails.CountryName", "Невідома країна" } }
+                        }
+                    },
+                    { "RegistrationDate", 1 },
+                    { "Rating", 1 }
+                }
+            }
+        }
+    };
 
-        //public async Task CreateAsync(User user)
-        //{
-        //    await _users.InsertOneAsync(user);
-        //}
+            var result = await _users.Aggregate<AuthorDto>(pipeline).FirstOrDefaultAsync();
+            return result;
+        }
 
-        //public async Task UpdateAsync(string id, User updatedUser)
-        //{
-        //    await _users.ReplaceOneAsync(u => u.Id == id, updatedUser);
-        //}
+        public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
+        {
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(updatedUser.City))
+                throw new ArgumentNullException("Потрібні ідентифікатор користувача та інформація про місто.");
 
-        //public async Task RemoveAsync(string id) =>
-        //    await _users.DeleteOneAsync(u => u.Id == id);
+            // Перевірка валідності ObjectId для CityId
+            if (!ObjectId.TryParse(updatedUser.City, out _))
+                throw new ArgumentException($"CityId '{updatedUser.City}' не є валідним ObjectId.");
+
+            // Отримуємо місто за CityId
+            var city = await _cities.Find(c => c.Id == updatedUser.City).FirstOrDefaultAsync();
+            if (city == null)
+                throw new Exception("Місто з вказаним ID не знайдено.");
+
+            // Отримуємо країну за CountryId
+            var country = await _countries.Find(c => c.Id == city.CountryId).FirstOrDefaultAsync();
+            if (country == null)
+                throw new Exception("Країна, пов'язана з цим містом, не знайдена.");
+
+            // Хешування пароля перед оновленням
+            string hashedPassword = HashPassword(updatedUser.Password);
+
+            // Оновлюємо дані користувача
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.Email, updatedUser.Email)
+                .Set(u => u.PasswordHash, hashedPassword) // Збереження хешу пароля
+                .Set(u => u.FirstName, updatedUser.FirstName)
+                .Set(u => u.LastName, updatedUser.LastName)
+                .Set(u => u.About, updatedUser.About)
+                .Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl)
+                .Set(u => u.CityId, city.Id); // Оновлюємо лише CityId
+
+            var result = await _users.UpdateOneAsync(
+                u => u.Id == userId,
+                updateDefinition
+            );
+
+            if (result.MatchedCount == 0)
+                return null;
+
+            // Повертаємо оновлені дані користувача
+            return new UserDto
+            {
+                Id = userId,
+                Email = updatedUser.Email,
+                Password = hashedPassword, // Повертаємо хеш пароля (опціонально)
+                FirstName = updatedUser.FirstName,
+                LastName = updatedUser.LastName,
+                About = updatedUser.About,
+                ProfilePhotoUrl = updatedUser.ProfilePhotoUrl,
+                City = city.CityName,
+                Country = country.CountryName
+            };
+        }
+        private string HashPassword(string password)
+        {
+            if (string.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password), "Пароль не може бути пустим або порожнім.");
+
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+            return Convert.ToBase64String(bytes);
+        }
+
+        public async Task RemoveAsync(string id) =>
+            await _users.DeleteOneAsync(u => u.Id == id);
 
         public async Task<List<AuthorDto>> GetPopularAuthorsAsync(int start, int limit)
         {

@@ -12,7 +12,7 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("RoleId")]
         [BsonIgnoreIfDefault]
-        public int RoleId { get; set; }
+        public int RoleId { get; set; } = 0;
 
         [BsonElement("Email")]
         [BsonRequired]
@@ -22,7 +22,7 @@ namespace CityOfRecipes_backend.Models
         [BsonRequired]
         [BsonIgnoreIfNull]
         [MinLength(6, ErrorMessage = "Пароль має бути не менше 6 символів.")]
-        public string? Password { get; set; }
+        public string? PasswordHash { get; set; }
 
         [BsonElement("RegistrationDate")]
         [BsonRequired]
