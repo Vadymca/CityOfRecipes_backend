@@ -141,5 +141,39 @@ namespace CityOfRecipes_backend.Controllers
             return NoContent();
         }
 
+        // Підтвердження електронної пошти
+
+        [HttpPost("initiate-email-confirmation/{userId}")]
+        public async Task<IActionResult> InitiateEmailConfirmation(string userId)
+        {
+            var token = await _userService.InitiateEmailConfirmationAsync(userId);
+            return Ok(new { Message = "Лист для підтвердження електронної пошти надіслано.", Token = token });
+        }
+
+        [HttpPost("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail([FromQuery] string token)
+        {
+            var success = await _userService.ConfirmEmailAsync(token);
+            if (success)
+                return Ok("Електронна пошта успішно підтверджена.");
+            else
+                return BadRequest("Підтвердження електронної пошти не вдалося.");
+        }
+
+        //Скидання пароля через email
+
+        [HttpPost("initiate-password-reset")]
+        public async Task<IActionResult> InitiatePasswordReset([FromBody] string email)
+        {
+            var token = await _userService.InitiatePasswordResetAsync(email);
+            return Ok(new { Message = "Лист для скидання пароля надіслано.", Token = token });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromQuery] string token, [FromBody] string newPassword)
+        {
+            await _userService.ResetPasswordAsync(token, newPassword);
+            return Ok("Пароль успішно оновлено.");
+        }
     }
 }

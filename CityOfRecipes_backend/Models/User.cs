@@ -64,6 +64,8 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("EmailConfirmed")]
         public bool EmailConfirmed { get; set; } = false;
+        public string? EmailConfirmationToken { get; set; } = null;
+        public string? PasswordResetToken { get; set; } = null;
 
         [BsonElement("TemporaryBan")]
         public bool TemporaryBan { get; set; } = false;

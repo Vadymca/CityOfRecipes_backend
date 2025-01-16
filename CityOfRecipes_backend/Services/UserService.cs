@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using Org.BouncyCastle.Crypto.Generators;
 using System.Security.Cryptography;
 
 namespace CityOfRecipes_backend.Services
@@ -13,14 +14,20 @@ namespace CityOfRecipes_backend.Services
         private readonly IMongoCollection<User> _users;
         private readonly IMongoCollection<City> _cities;
         private readonly IMongoCollection<Country> _countries;
+        private readonly TokenService _tokenService;
+        private readonly IEmailService _emailService;
 
-        public UserService(IOptions<MongoDBSettings> mongoSettings)
+        public UserService(IOptions<MongoDBSettings> mongoSettings, 
+                           TokenService tokenService,
+                           IEmailService emailService)
         {
             var client = new MongoClient(mongoSettings.Value.ConnectionString);
             var database = client.GetDatabase(mongoSettings.Value.DatabaseName);
             _users = database.GetCollection<User>("Users");
             _cities = database.GetCollection<City>("Cities");
             _countries = database.GetCollection<Country>("Countries");
+            _tokenService = tokenService;
+            _emailService = emailService;
         }
 
         public async Task<List<AuthorDto>> GetAsync(int start, int limit)
@@ -265,6 +272,15 @@ namespace CityOfRecipes_backend.Services
                 }).ToList() ?? new List<AuthorDto>()
             };
         }
+        public async Task<List<AuthorDto>> GetPopularAuthorsAsync(int start, int limit)
+        {
+            var authors = await GetAsync(start, limit);
+
+            // Сортування за рейтингом
+            authors = authors.OrderByDescending(a => a.Rating).ToList();
+
+            return authors;
+        }
 
         public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
         {
@@ -332,14 +348,86 @@ namespace CityOfRecipes_backend.Services
         public async Task RemoveAsync(string id) =>
             await _users.DeleteOneAsync(u => u.Id == id);
 
-        public async Task<List<AuthorDto>> GetPopularAuthorsAsync(int start, int limit)
+        // Підтвердження електронної пошти
+        public async Task<string> InitiateEmailConfirmationAsync(string userId)
         {
-            var authors = await GetAsync(start, limit);
+            // Знаходимо користувача
+            var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if(user == null)
+                throw new Exception("Користувача не знайдено.");
+            // Генеруємо токен
+            var token = _tokenService.GenerateEmailConfirmationToken();
+            user.EmailConfirmationToken = token;
+            // Оновлюємо користувача
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.EmailConfirmationToken, token);
+            await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
+            // Надсилаємо листа користувачу
+            //var confirmationLink = $"https://localhost:7186/api/user/confirm-email?token={token}";
+            await _emailService.SendEmailAsync(
+                user.Email,
+                "Підтвердження електронної пошти",
+                $"Ваш код підтвердження: {token}\n\n" +
+                "Скопіюйте цей код і введіть його в програмі, щоб підтвердити вашу електронну адресу."
+                );
 
-            // Сортування за рейтингом
-            authors = authors.OrderByDescending(a => a.Rating).ToList();
+            return token;
+        }
 
-            return authors;
+        public async Task<bool> ConfirmEmailAsync(string token)
+        {
+            // Знаходимо користувача за токеном
+            var user = await _users.Find(u => u.EmailConfirmationToken == token).FirstOrDefaultAsync();
+            if (user == null)
+                throw new Exception("Токен недійсний або користувача не знайдено.");
+            // Підтверджуємо email
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.EmailConfirmed, true)
+                .Set(u => u.EmailConfirmationToken, null);
+            var result = await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+
+            return result.ModifiedCount > 0;
+        }
+
+        //Скидання пароля через email
+        public async Task<string> InitiatePasswordResetAsync(string email)
+        {
+            var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
+            if (user == null)
+                throw new Exception("Користувача з таким email не знайдено.");
+
+            var token = _tokenService.GenerateEmailConfirmationToken();
+            user.PasswordResetToken = token;
+
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.PasswordResetToken, token);
+
+            await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+
+            //var resetLink = $"https://localhost:7186/api/user/reset-password?token={token}";
+            await _emailService.SendEmailAsync(
+                 user.Email,
+                 "Скидання пароля",
+                 $"Ваш код для скидання пароля: {token}\n\n" +
+                 "Скопіюйте цей код і введіть його в програмі, щоб скинути ваш пароль."
+             );
+
+            return token;
+        }
+
+        public async Task ResetPasswordAsync(string token, string newPassword)
+        {
+            var user = await _users.Find(u => u.PasswordResetToken == token).FirstOrDefaultAsync();
+            if (user == null)
+                throw new Exception("Токен недійсний або користувача не знайдено.");
+
+            var hashedPassword = HashPassword(newPassword);
+
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.PasswordHash, hashedPassword)
+                .Set(u => u.PasswordResetToken, null); // Видаляємо токен
+
+            await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
         }
     }
 }

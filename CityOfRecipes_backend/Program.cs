@@ -22,6 +22,7 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<IImageUploadService, ImageUploadService>();
             builder.Services.AddSingleton<CountryService>();
             builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddSingleton<TokenService>();
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -36,9 +37,47 @@ namespace CityOfRecipes_backend
                     ValidateAudience = false
                 };
             });
+            builder.Services.AddSingleton<IEmailService>(provider =>
+            {
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                var emailSettings = configuration.GetSection("EmailSettings");
+                return new EmailService(
+                    emailSettings["SmtpHost"],
+                    int.Parse(emailSettings["SmtpPort"]),
+                    emailSettings["SmtpUser"],
+                    emailSettings["SmtpPass"],
+                    emailSettings["FromEmail"]
+                );
+            });
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+                    Scheme = "bearer",
+                    BearerFormat = "JWT",
+                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                    Description = "¬вед≥ть токен у формат≥: Bearer {токен}"
+                });
+
+                options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+            });
             // CORS policy
             builder.Services.AddCors(options =>
             {
