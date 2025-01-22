@@ -106,7 +106,7 @@ namespace CityOfRecipes_backend.Services
             if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
                 return false;
 
-            // Регулярний вираз для перевірки вимог:
+            // Регулярний вираз для перевірки вимог :
             // - Мінімум одна мала буква
             // - Мінімум одна велика буква
             // - Мінімум одна цифра
