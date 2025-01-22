@@ -54,7 +54,7 @@ namespace CityOfRecipes_backend.Services
             // Перевірка на null
             if (tags == null || tags.Count == 0)
             {
-                throw new ArgumentException("Tags list is null or empty.");
+                throw new ArgumentException("Список тегів нульовий або порожній.");
             }
 
             // Видалення порожніх тегів
@@ -62,7 +62,7 @@ namespace CityOfRecipes_backend.Services
 
             if (validTags.Count == 0)
             {
-                throw new ArgumentException("Tags list contains only null or empty values.");
+                throw new ArgumentException("Список тегів містить лише нульові або порожні значення.");
             }
 
             // Форматування тегів
@@ -177,7 +177,7 @@ namespace CityOfRecipes_backend.Services
             var deleteResult = await _recipes.DeleteOneAsync(recipe => recipe.Id == id);
             if (deleteResult.DeletedCount == 0)
             {
-                throw new KeyNotFoundException($"Recipe with ID {id} not found.");
+                throw new KeyNotFoundException($"Рецепт з ID {id} не знайдено.");
             }
         }
     }

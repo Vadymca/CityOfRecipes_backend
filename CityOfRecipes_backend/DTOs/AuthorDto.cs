@@ -15,6 +15,7 @@ namespace CityOfRecipes_backend.DTOs
         public string Country { get; set; } = "Невідома країна";
         public DateTime RegistrationDate { get; set; }
         public double Rating { get; set; }
+        public string About { get; set; } = string.Empty;
 
     }
 }

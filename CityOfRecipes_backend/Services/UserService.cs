@@ -6,6 +6,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Org.BouncyCastle.Crypto.Generators;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace CityOfRecipes_backend.Services
 {
@@ -109,7 +110,8 @@ namespace CityOfRecipes_backend.Services
                     { "City", "$CityDetails.CityName" },
                     { "Country", "$CountryDetails.CountryName" },
                     { "RegistrationDate", 1 },
-                    { "Rating", 1 }
+                    { "Rating", 1 },
+                    { "About", 1 }
                 }
             }
         }
@@ -129,7 +131,8 @@ namespace CityOfRecipes_backend.Services
                     City = result.Contains("City") ? result["City"].ToString() : "Невідоме місто",
                     Country = result.Contains("Country") ? result["Country"].ToString() : "Невідома країна",
                     RegistrationDate = result.Contains("RegistrationDate") ? result["RegistrationDate"].ToUniversalTime() : DateTime.MinValue,
-                    Rating = result.Contains("Rating") ? result["Rating"].ToDouble() : 0
+                    Rating = result.Contains("Rating") ? result["Rating"].ToDouble() : 0,
+                    About = result.Contains("About") ? result["About"].ToString() : null
                 };
 
                 return author;
@@ -140,7 +143,7 @@ namespace CityOfRecipes_backend.Services
         {
             if (!ObjectId.TryParse(authorId, out _))
             {
-                throw new ArgumentException("Invalid author ID format");
+                throw new ArgumentException("Недійсний формат ідентифікатора автора");
             }
 
             var pipeline = new[]
@@ -216,7 +219,8 @@ namespace CityOfRecipes_backend.Services
                         }
                     },
                     { "RegistrationDate", 1 },
-                    { "Rating", 1 }
+                    { "Rating", 1 },
+                    { "About", 1 }
                 }
             }
         }
@@ -226,7 +230,7 @@ namespace CityOfRecipes_backend.Services
             return result;
         }
 
-        public async Task<UserDto?> GetAboutMeAsync(string userId)
+        public async Task<AboutUserDto?> GetAboutMeAsync(string userId)
         {
             // Перевіряємо, чи валідний ObjectId
             if (!ObjectId.TryParse(userId, out _))
@@ -246,9 +250,10 @@ namespace CityOfRecipes_backend.Services
             var countryName = country?.CountryName ?? "Невідома країна";
 
             // Повертаємо DTO з інформацією про користувача
-            return new UserDto
+            return new AboutUserDto
             {
                 Id = user.Id,
+                RoleId = user.RoleId,
                 Email = user.Email,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
@@ -256,20 +261,9 @@ namespace CityOfRecipes_backend.Services
                 ProfilePhotoUrl = user.ProfilePhotoUrl,
                 City = cityName,
                 Country = countryName,
-                FavoriteRecipes = user.FavoriteRecipes?.Select(r => new RecipeDto
-                {
-                    Id = r.Id,
-                    Name = r.RecipeName,
-                    PreviewImageUrl = r.PhotoUrl,
-                }).ToList() ?? new List<RecipeDto>(),
-                FavoriteAuthors = user.FavoriteAuthors?.Select(a => new AuthorDto
-                {
-                    Id = a.Id,
-                    FirstName = a.FirstName,
-                    LastName = a.LastName,
-                    ProfilePhotoUrl = a.ProfilePhotoUrl,
-                    Rating = a.Rating,
-                }).ToList() ?? new List<AuthorDto>()
+                RegistrationDate = user.RegistrationDate,
+                Rating = user.Rating,
+                EmailConfirmed = user.EmailConfirmed
             };
         }
         public async Task<List<AuthorDto>> GetPopularAuthorsAsync(int start, int limit)
@@ -284,58 +278,104 @@ namespace CityOfRecipes_backend.Services
 
         public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
         {
-            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(updatedUser.City))
-                throw new ArgumentNullException("Потрібні ідентифікатор користувача та інформація про місто.");
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentNullException(nameof(userId), "Ідентифікатор користувача не може бути пустим.");
 
-            // Перевірка валідності ObjectId для CityId
-            if (!ObjectId.TryParse(updatedUser.City, out _))
-                throw new ArgumentException($"CityId '{updatedUser.City}' не є валідним ObjectId.");
+            // Завантажуємо поточного користувача з бази
+            var existingUser = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (existingUser == null)
+                throw new Exception("Користувача з вказаним ID не знайдено.");
 
-            // Отримуємо місто за CityId
-            var city = await _cities.Find(c => c.Id == updatedUser.City).FirstOrDefaultAsync();
-            if (city == null)
-                throw new Exception("Місто з вказаним ID не знайдено.");
+            var updates = new List<UpdateDefinition<User>>();
+            var updateDefinitionBuilder = Builders<User>.Update;
 
-            // Отримуємо країну за CountryId
-            var country = await _countries.Find(c => c.Id == city.CountryId).FirstOrDefaultAsync();
-            if (country == null)
-                throw new Exception("Країна, пов'язана з цим містом, не знайдена.");
+            // Оновлюємо лише ті поля, які передані (перевірка на null):
+            if (!string.IsNullOrEmpty(updatedUser.Email))
+                updates.Add(updateDefinitionBuilder.Set(u => u.Email, updatedUser.Email));
 
-            // Хешування пароля перед оновленням
-            string hashedPassword = HashPassword(updatedUser.Password);
+          
 
-            // Оновлюємо дані користувача
-            var updateDefinition = Builders<User>.Update
-                .Set(u => u.Email, updatedUser.Email)
-                .Set(u => u.PasswordHash, hashedPassword) // Збереження хешу пароля
-                .Set(u => u.FirstName, updatedUser.FirstName)
-                .Set(u => u.LastName, updatedUser.LastName)
-                .Set(u => u.About, updatedUser.About)
-                .Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl)
-                .Set(u => u.CityId, city.Id); // Оновлюємо лише CityId
+            if (!string.IsNullOrEmpty(updatedUser.FirstName))
+                updates.Add(updateDefinitionBuilder.Set(u => u.FirstName, updatedUser.FirstName));
 
-            var result = await _users.UpdateOneAsync(
-                u => u.Id == userId,
-                updateDefinition
-            );
+            if (!string.IsNullOrEmpty(updatedUser.LastName))
+                updates.Add(updateDefinitionBuilder.Set(u => u.LastName, updatedUser.LastName));
+
+            if (!string.IsNullOrEmpty(updatedUser.About))
+                updates.Add(updateDefinitionBuilder.Set(u => u.About, updatedUser.About));
+
+            if (!string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl))
+                updates.Add(updateDefinitionBuilder.Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl));
+
+            // Обробляємо поле City, якщо воно передане
+            if (updatedUser.City != null)
+            {
+                if (string.IsNullOrWhiteSpace(updatedUser.City))
+                {
+                    // Якщо поле передане як пустий рядок або пробіли, очищуємо CityId
+                    updates.Add(updateDefinitionBuilder.Set(u => u.CityId, null));
+                }
+                else if (ObjectId.TryParse(updatedUser.City, out _))
+                {
+                    // Якщо City є валідним ObjectId, виконуємо пошук у базі
+                    var city = await _cities.Find(c => c.Id == updatedUser.City).FirstOrDefaultAsync();
+                    if (city == null)
+                        throw new Exception("Місто з вказаним ID не знайдено.");
+
+                    // Додаємо оновлення, якщо місто знайдено
+                    updates.Add(updateDefinitionBuilder.Set(u => u.CityId, city.Id));
+                }
+                else
+                {
+                    // Якщо City не є валідним ObjectId, викидаємо помилку
+                    throw new ArgumentException($"CityId '{updatedUser.City}' не є валідним ObjectId.");
+                }
+            }
+
+            // Якщо немає оновлень, нічого не змінюємо
+            if (!updates.Any())
+                return new UserDto
+                {
+                    Id = existingUser.Id,
+                    Email = existingUser.Email,
+                    FirstName = existingUser.FirstName,
+                    LastName = existingUser.LastName,
+                    About = existingUser.About,
+                    ProfilePhotoUrl = existingUser.ProfilePhotoUrl,
+                    City = existingUser.CityId,
+                    Country = null
+                };
+
+            // Комбінуємо всі оновлення
+            var updateDefinition = updateDefinitionBuilder.Combine(updates);
+            var result = await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
 
             if (result.MatchedCount == 0)
                 return null;
 
             // Повертаємо оновлені дані користувача
+            var updatedCity = existingUser.CityId != null
+                ? await _cities.Find(c => c.Id == existingUser.CityId).FirstOrDefaultAsync()
+                : null;
+
+            var updatedCountry = updatedCity != null
+                ? await _countries.Find(c => c.Id == updatedCity.CountryId).FirstOrDefaultAsync()
+                : null;
+
             return new UserDto
             {
                 Id = userId,
-                Email = updatedUser.Email,
-                Password = updatedUser.Password, 
-                FirstName = updatedUser.FirstName,
-                LastName = updatedUser.LastName,
-                About = updatedUser.About,
-                ProfilePhotoUrl = updatedUser.ProfilePhotoUrl,
-                City = city.CityName,
-                Country = country.CountryName
+                Email = !string.IsNullOrEmpty(updatedUser.Email) ? updatedUser.Email : existingUser.Email,
+                FirstName = !string.IsNullOrEmpty(updatedUser.FirstName) ? updatedUser.FirstName : existingUser.FirstName,
+                LastName = !string.IsNullOrEmpty(updatedUser.LastName) ? updatedUser.LastName : existingUser.LastName,
+                About = !string.IsNullOrEmpty(updatedUser.About) ? updatedUser.About : existingUser.About,
+                ProfilePhotoUrl = !string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl) ? updatedUser.ProfilePhotoUrl : existingUser.ProfilePhotoUrl,
+                City = updatedCity.CityName, 
+                Country = updatedCountry?.CountryName,
+                
             };
         }
+
         private string HashPassword(string password)
         {
             if (string.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password), "Пароль не може бути пустим або порожнім.");
@@ -345,89 +385,200 @@ namespace CityOfRecipes_backend.Services
             return Convert.ToBase64String(bytes);
         }
 
-        public async Task RemoveAsync(string id) =>
-            await _users.DeleteOneAsync(u => u.Id == id);
+        public async Task RemoveAsync(string id)
+        {
+            // Знаходимо користувача за id
+            var user = await _users.Find(u => u.Id == id).FirstOrDefaultAsync();
+            if (user == null)
+                throw new Exception("Користувача з таким ID не знайдено.");
+
+            // Оновлюємо дані користувача
+            var updateDefinition = Builders<User>.Update
+                .Set(u => u.Email, null)  // Видаллення електронної пошти
+                .Set(u => u.FirstName, "Видалений ") // Заміна імені
+                .Set(u => u.LastName, "аккаунт")  // Заміна прізвища
+                .Set(u => u.ProfilePhotoUrl, null); // Видалення аватарки
+
+            // Застосовуємо оновлення до користувача
+            var result = await _users.UpdateOneAsync(u => u.Id == id, updateDefinition);
+
+            // Перевірка, чи оновлені дані користувача
+            if (result.ModifiedCount == 0)
+                throw new Exception("Не вдалося оновити дані користувача.");
+
+        }
+
 
         // Підтвердження електронної пошти
         public async Task<string> InitiateEmailConfirmationAsync(string userId)
         {
-            // Знаходимо користувача
-            var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
-            if(user == null)
-                throw new Exception("Користувача не знайдено.");
-            // Генеруємо токен
-            var token = _tokenService.GenerateEmailConfirmationToken();
-            user.EmailConfirmationToken = token;
-            // Оновлюємо користувача
-            var updateDefinition = Builders<User>.Update
-                .Set(u => u.EmailConfirmationToken, token);
-            await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
-            // Надсилаємо листа користувачу
-            //var confirmationLink = $"https://localhost:7186/api/user/confirm-email?token={token}";
-            await _emailService.SendEmailAsync(
-                user.Email,
-                "Підтвердження електронної пошти",
-                $"Ваш код підтвердження: {token}\n\n" +
-                "Скопіюйте цей код і введіть його в програмі, щоб підтвердити вашу електронну адресу."
-                );
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentNullException(nameof(userId), "Ідентифікатор користувача не може бути пустим.");
+            try
+            {
+                // Знаходимо користувача
+                var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+                if (user == null)
+                    throw new Exception("Користувача не знайдено.");
+                // Генеруємо токен
+                var token = _tokenService.GenerateEmailConfirmationToken();
+                user.EmailConfirmationToken = token;
+                // Оновлюємо користувача
+                var updateDefinition = Builders<User>.Update
+                    .Set(u => u.EmailConfirmationToken, token);
+                await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
+                // Надсилаємо листа користувачу
+                //var confirmationLink = $"https://localhost:7186/api/user/confirm-email?token={token}";
+                await _emailService.SendEmailAsync(
+                    user.Email,
+                    "Підтвердження електронної пошти",
+                    $"Ваш код підтвердження: {token}\n\n" +
+                    "Скопіюйте цей код і введіть його в програмі, щоб підтвердити вашу електронну адресу."
+                    );
 
-            return token;
+                return token;
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new ArgumentNullException($"Некоректні дані: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Сталася помилка при ініціалізації підтвердження електронної пошти: {ex.Message}");
+            }
         }
 
         public async Task<bool> ConfirmEmailAsync(string token)
         {
-            // Знаходимо користувача за токеном
-            var user = await _users.Find(u => u.EmailConfirmationToken == token).FirstOrDefaultAsync();
-            if (user == null)
-                throw new Exception("Токен недійсний або користувача не знайдено.");
-            // Підтверджуємо email
-            var updateDefinition = Builders<User>.Update
-                .Set(u => u.EmailConfirmed, true)
-                .Set(u => u.EmailConfirmationToken, null);
-            var result = await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+            if (string.IsNullOrEmpty(token))
+                throw new ArgumentNullException(nameof(token), "Токен не може бути пустим.");
 
-            return result.ModifiedCount > 0;
+            try
+            {
+                // Знаходимо користувача за токеном
+                var user = await _users.Find(u => u.EmailConfirmationToken == token).FirstOrDefaultAsync();
+                if (user == null)
+                    throw new Exception("Токен недійсний або користувача не знайдено.");
+
+                // Підтверджуємо email
+                var updateDefinition = Builders<User>.Update
+                    .Set(u => u.EmailConfirmed, true)
+                    .Set(u => u.EmailConfirmationToken, null);
+                var result = await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+
+                return result.ModifiedCount > 0;
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new ArgumentNullException($"Некоректний токен: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Сталася помилка при підтвердженні електронної пошти: {ex.Message}");
+            }
         }
 
         //Скидання пароля через email
         public async Task<string> InitiatePasswordResetAsync(string email)
         {
-            var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (user == null)
-                throw new Exception("Користувача з таким email не знайдено.");
+            if (string.IsNullOrEmpty(email))
+                throw new ArgumentNullException(nameof(email), "Email не може бути пустим.");
 
-            var token = _tokenService.GenerateEmailConfirmationToken();
-            user.PasswordResetToken = token;
+            try
+            {
+                // Знаходимо користувача за email
+                var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
+                if (user == null)
+                    throw new Exception("Користувача з таким email не знайдено.");
 
-            var updateDefinition = Builders<User>.Update
-                .Set(u => u.PasswordResetToken, token);
+                // Генеруємо токен
+                var token = _tokenService.GenerateEmailConfirmationToken();
+                user.PasswordResetToken = token;
 
-            await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+                var updateDefinition = Builders<User>.Update
+                    .Set(u => u.PasswordResetToken, token);
 
-            //var resetLink = $"https://localhost:7186/api/user/reset-password?token={token}";
-            await _emailService.SendEmailAsync(
-                 user.Email,
-                 "Скидання пароля",
-                 $"Ваш код для скидання пароля: {token}\n\n" +
-                 "Скопіюйте цей код і введіть його в програмі, щоб скинути ваш пароль."
-             );
+                // Оновлюємо користувача в базі даних
+                var updateResult = await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+                if (updateResult.ModifiedCount == 0)
+                    throw new Exception("Не вдалося оновити користувача з новим токеном.");
 
-            return token;
+                // Надсилаємо лист для скидання пароля
+                await _emailService.SendEmailAsync(
+                    user.Email,
+                    "Скидання пароля",
+                    $"Ваш код для скидання пароля: {token}\n\n" +
+                    "Скопіюйте цей код і введіть його в програмі, щоб скинути ваш пароль."
+                );
+
+                return token;
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new ArgumentNullException($"Некоректний email: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Сталася помилка при ініціалізації скидання пароля: {ex.Message}");
+            }
         }
 
         public async Task ResetPasswordAsync(string token, string newPassword)
         {
-            var user = await _users.Find(u => u.PasswordResetToken == token).FirstOrDefaultAsync();
-            if (user == null)
-                throw new Exception("Токен недійсний або користувача не знайдено.");
+            if (string.IsNullOrEmpty(token))
+                throw new ArgumentNullException(nameof(token), "Токен не може бути порожнім.");
 
-            var hashedPassword = HashPassword(newPassword);
+            if (string.IsNullOrEmpty(newPassword))
+                throw new ArgumentNullException(nameof(newPassword), "Пароль не може бути порожнім.");
 
-            var updateDefinition = Builders<User>.Update
-                .Set(u => u.PasswordHash, hashedPassword)
-                .Set(u => u.PasswordResetToken, null); // Видаляємо токен
+            try
+            {
+                // Знаходимо користувача за токеном
+                var user = await _users.Find(u => u.PasswordResetToken == token).FirstOrDefaultAsync();
+                if (user == null)
+                    throw new Exception("Токен недійсний або користувача не знайдено.");
 
-            await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+                // Перевірка: чи відповідає пароль вимогам
+                if (!IsValidPassword(newPassword))
+                    throw new ArgumentException(
+                        "Пароль має бути не менше 6 символів, містити хоча б одну велику букву, одну малу букву та одну цифру.",
+                        nameof(newPassword));
+
+                // Хешуємо новий пароль
+                var hashedPassword = HashPassword(newPassword);
+
+                // Створюємо оновлення
+                var updateDefinition = Builders<User>.Update
+                    .Set(u => u.PasswordHash, hashedPassword)
+                    .Set(u => u.PasswordResetToken, null); // Видаляємо токен
+
+                // Оновлюємо пароль користувача в базі
+                var result = await _users.UpdateOneAsync(u => u.Id == user.Id, updateDefinition);
+                if (result.ModifiedCount == 0)
+                    throw new Exception("Не вдалося оновити пароль. Можливо, користувач вже підтвердив скидання пароля.");
+
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new ArgumentNullException($"Помилка: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Помилка при скиданні пароля: {ex.Message}");
+            }
+        }
+
+        private bool IsValidPassword(string password)
+        {
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+                return false;
+
+            // Регулярний вираз для перевірки вимог:
+            // - Мінімум одна мала буква
+            // - Мінімум одна велика буква
+            // - Мінімум одна цифра
+            var passwordRegex = new Regex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$");
+            return passwordRegex.IsMatch(password);
         }
     }
 }

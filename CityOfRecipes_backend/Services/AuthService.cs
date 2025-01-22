@@ -3,6 +3,8 @@ using MongoDB.Driver;
 using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.ComponentModel.DataAnnotations;
+using System.Text.RegularExpressions;
 
 namespace CityOfRecipes_backend.Services
 {
@@ -19,20 +21,48 @@ namespace CityOfRecipes_backend.Services
 
         public async Task RegisterAsync(string email, string password)
         {
+            // Перевірка: чи є email коректним
+            if (string.IsNullOrWhiteSpace(email) || !IsValidEmail(email))
+                throw new ArgumentException("Некоректний формат електронної пошти.", nameof(email));
+
+            // Перевірка: чи відповідає пароль вимогам
+            if (!IsValidPassword(password))
+                throw new ArgumentException(
+                    "Пароль має бути не менше 6 символів, містити хоча б одну велику букву, одну малу букву та одну цифру.",
+                    nameof(password));
+
+            // Перевірка: чи існує вже користувач із таким email
             var existingUser = await _dbContext.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (existingUser != null) throw new Exception("Користувач уже існує");
+            if (existingUser != null)
+                throw new Exception("Користувач із такою електронною поштою вже існує.");
 
+            // Хешування пароля
             var passwordHash = HashPassword(password);
-            var user = new User { Email = email, PasswordHash = passwordHash };
 
+            // Створення нового користувача
+            var user = new User
+            {
+                Email = email,
+                PasswordHash = passwordHash
+            };
+
+            // Збереження в базі даних
             await _dbContext.Users.InsertOneAsync(user);
         }
 
         public async Task<string> AuthenticateAsync(string email, string password)
         {
+            // Перевірка: чи є email коректним
+            if (string.IsNullOrWhiteSpace(email) || !IsValidEmail(email))
+                throw new ArgumentException("Некоректний формат електронної пошти.", nameof(email));
+
+            // Перевірка: чи не порожній пароль
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Пароль не може бути порожнім.", nameof(password));
+
             var user = await _dbContext.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
             if (user == null || !VerifyPassword(password, user.PasswordHash))
-                throw new Exception("Invalid credentials");
+                throw new Exception("Недійсні облікові дані");
 
             return GenerateJwtToken(user);
         }
@@ -65,5 +95,24 @@ namespace CityOfRecipes_backend.Services
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
+
+        private bool IsValidEmail(string email)
+        {
+            return new EmailAddressAttribute().IsValid(email);
+        }
+
+        private bool IsValidPassword(string password)
+        {
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+                return false;
+
+            // Регулярний вираз для перевірки вимог:
+            // - Мінімум одна мала буква
+            // - Мінімум одна велика буква
+            // - Мінімум одна цифра
+            var passwordRegex = new Regex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$");
+            return passwordRegex.IsMatch(password);
+        }
+
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.RegularExpressions;
 
 namespace CityOfRecipes_backend.Controllers
 {
@@ -91,6 +92,14 @@ namespace CityOfRecipes_backend.Controllers
 
                 return Ok(user);
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest($"Помилка формату даних: {ex.Message}");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound($"Користувача не знайдено: {ex.Message}");
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { error = ex.Message });
@@ -119,7 +128,11 @@ namespace CityOfRecipes_backend.Controllers
             }
             catch (ArgumentNullException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest($"Невірні дані: {ex.Message}");
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
             }
             catch (Exception ex)
             {
@@ -131,14 +144,25 @@ namespace CityOfRecipes_backend.Controllers
         [Authorize]
         public async Task<IActionResult> DeleteUser(string id)
         {
-            var user = await _userService.GetByIdAsync(id);
+            try
+            {
+                // Знаходимо користувача за ID
+                var user = await _userService.GetByIdAsync(id);
 
-            if (user is null)
-                return NotFound();
+                if (user is null)
+                    return NotFound("Користувача не знайдено.");
 
-            await _userService.RemoveAsync(id);
+                // Оновлюємо дані користувача (заміна email, ім'я та аватарки)
+                await _userService.RemoveAsync(id);
 
-            return NoContent();
+                // Повертаємо успішну відповідь з повідомленням
+                return Ok(new { Message = "Аккаунт успішно видалений" });
+            }
+            catch (Exception ex)
+            {
+                // Логування або інша обробка помилки
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Сталася помилка: {ex.Message}");
+            }
         }
 
         // Підтвердження електронної пошти
@@ -146,18 +170,50 @@ namespace CityOfRecipes_backend.Controllers
         [HttpPost("initiate-email-confirmation/{userId}")]
         public async Task<IActionResult> InitiateEmailConfirmation(string userId)
         {
-            var token = await _userService.InitiateEmailConfirmationAsync(userId);
-            return Ok(new { Message = "Лист для підтвердження електронної пошти надіслано.", Token = token });
+            if (string.IsNullOrEmpty(userId))
+            {
+                return BadRequest("Ідентифікатор користувача є обов'язковим.");
+            }
+
+            try
+            {
+                var token = await _userService.InitiateEmailConfirmationAsync(userId);
+                return Ok(new { Message = "Лист для підтвердження електронної пошти надіслано." });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+            }
         }
 
         [HttpPost("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromQuery] string token)
         {
-            var success = await _userService.ConfirmEmailAsync(token);
-            if (success)
-                return Ok("Електронна пошта успішно підтверджена.");
-            else
-                return BadRequest("Підтвердження електронної пошти не вдалося.");
+            if (string.IsNullOrEmpty(token))
+            {
+                return BadRequest("Токен є обов'язковим.");
+            }
+
+            try
+            {
+                var success = await _userService.ConfirmEmailAsync(token);
+                if (success)
+                    return Ok("Електронна пошта успішно підтверджена.");
+                else
+                    return BadRequest("Підтвердження електронної пошти не вдалося.");
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+            }
         }
 
         //Скидання пароля через email
@@ -165,15 +221,49 @@ namespace CityOfRecipes_backend.Controllers
         [HttpPost("initiate-password-reset")]
         public async Task<IActionResult> InitiatePasswordReset([FromBody] string email)
         {
-            var token = await _userService.InitiatePasswordResetAsync(email);
-            return Ok(new { Message = "Лист для скидання пароля надіслано.", Token = token });
+            if (string.IsNullOrEmpty(email))
+            {
+                return BadRequest("Email є обов'язковим.");
+            }
+
+            try
+            {
+                var token = await _userService.InitiatePasswordResetAsync(email);
+                return Ok(new { Message = "Лист для скидання пароля надіслано." });
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+            }
         }
 
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromQuery] string token, [FromBody] string newPassword)
         {
-            await _userService.ResetPasswordAsync(token, newPassword);
-            return Ok("Пароль успішно оновлено.");
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(newPassword))
+            {
+                return BadRequest("Токен та новий пароль є обов'язковими.");
+            }
+
+            try
+            {
+                await _userService.ResetPasswordAsync(token, newPassword);
+                return Ok("Пароль успішно оновлено.");
+            }
+            catch (ArgumentNullException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+            }
         }
+
+        
     }
 }
