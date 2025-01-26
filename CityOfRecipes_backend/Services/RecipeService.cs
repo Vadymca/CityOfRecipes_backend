@@ -49,34 +49,68 @@ namespace CityOfRecipes_backend.Services
             return uniqueSlug;
         }
 
-        public async Task<List<Recipe>> SearchRecipesByTagAsync(List<string> tags)
+        public async Task<List<Recipe>> SearchRecipesByTagAsync(string tag)
         {
-            // Перевірка на null
-            if (tags == null || tags.Count == 0)
+            if (string.IsNullOrWhiteSpace(tag))
             {
-                throw new ArgumentException("Список тегів нульовий або порожній.");
+                throw new ArgumentException("Тег не може бути порожнім.");
             }
 
-            // Видалення порожніх тегів
-            var validTags = tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToList();
-
-            if (validTags.Count == 0)
+            try
             {
-                throw new ArgumentException("Список тегів містить лише нульові або порожні значення.");
+                // Уніфікуємо формат тегу (без решітки, у нижньому регістрі)
+                var normalizedTag = tag.Trim().ToLower();
+                if (normalizedTag.StartsWith("#"))
+                {
+                    normalizedTag = normalizedTag.Substring(1); // Видаляємо решітку
+                }
+
+                // Фільтр: пошук рецептів, які містять заданий тег
+                var filter = Builders<Recipe>.Filter.AnyEq(r => r.Tags, $"#{normalizedTag}");
+
+                // Отримання відповідних рецептів
+                var recipes = await _recipes.Find(filter).ToListAsync();
+
+                if (!recipes.Any())
+                {
+                    throw new KeyNotFoundException($"Жодного рецепта з тегом '{tag}' не знайдено.");
+                }
+
+                return recipes;
             }
-
-            // Форматування тегів
-            var formattedTags = validTags.Select(tag => tag.StartsWith("#") ? tag : $"#{tag}").ToList();
-
-            // Побудова фільтра
-            var filter = Builders<Recipe>.Filter.AnyIn(r => r.Tags, formattedTags);
-
-            // Виконання пошуку
-            return await _recipes.Find(filter).ToListAsync();
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час пошуку рецептів за тегом: {ex.Message}");
+            }
         }
 
+        public async Task<List<Recipe>> SearchRecipesByStringAsync(string searchQuery)
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                throw new ArgumentException("Рядок пошуку не може бути порожнім.");
+            }
 
+            try
+            {
+                // Фільтр для текстового пошуку
+                var filter = Builders<Recipe>.Filter.Text(searchQuery);
 
+                // Сортування за релевантністю
+                var sort = Builders<Recipe>.Sort.MetaTextScore("textScore");
+
+                // Пошук документів
+                var recipes = await _recipes.Find(filter)
+                                            .Sort(sort) // Сортування за релевантністю
+                                            .ToListAsync();
+
+                return recipes;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час пошуку: {ex.Message}");
+            }
+        }
 
         public async Task<List<Recipe>> GetAllAsync() =>
             await _recipes.Find(recipe => true).ToListAsync();
@@ -94,8 +128,24 @@ namespace CityOfRecipes_backend.Services
         public async Task<Recipe> GetBySlugAsync(string slug) =>
             await _recipes.Find(recipe => recipe.Slug == slug).FirstOrDefaultAsync();
 
-        public async Task<Recipe?> GetByIdAsync(string id) =>
-            await _recipes.Find(recipe => recipe.Id == id).FirstOrDefaultAsync();
+        public async Task<Recipe?> GetByIdAsync(string recipeId)
+        {
+            try
+            {
+                var recipe = await _recipes.Find(r => r.Id == recipeId).FirstOrDefaultAsync();
+
+                if (recipe == null)
+                {
+                    throw new KeyNotFoundException($"Рецепт з ID {recipeId} не знайдено.");
+                }
+
+                return recipe;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час отримання рецепта: {ex.Message}");
+            }
+        }
 
         public async Task CreateAsync(Recipe newRecipe)
         {
@@ -130,55 +180,115 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        public async Task UpdateAsync(string id, Recipe updatedRecipe)
+        public async Task UpdateAsync(string recipeId, Recipe updatedData)
         {
-            var existingRecipe = await _recipes.Find(recipe => recipe.Id == id).FirstOrDefaultAsync();
-            if (existingRecipe is null)
+            try
             {
-                throw new KeyNotFoundException($"Рецепт з ID {id} не знайдено.");
-            }
+                // Знайти рецепт у базі даних
+                var existingRecipe = await _recipes.Find(r => r.Id == recipeId).FirstOrDefaultAsync();
+                if (existingRecipe == null)
+                {
+                    throw new KeyNotFoundException($"Рецепт з ID {recipeId} не знайдено.");
+                }
 
-            // Зміна Slug тільки якщо змінено RecipeName
-            if (!existingRecipe.RecipeName.Equals(updatedRecipe.RecipeName, StringComparison.OrdinalIgnoreCase))
+                // Перевірка на участь у конкурсі
+                if (existingRecipe.IsParticipatedInContest)
+                {
+                    throw new InvalidOperationException("Цей рецепт брав участь у конкурсі та не може бути оновлений.");
+                }
+
+                // Генерація слага, якщо назва змінена
+                if (!string.IsNullOrWhiteSpace(updatedData.RecipeName) && updatedData.RecipeName != existingRecipe.RecipeName)
+                {
+                    existingRecipe.Slug = await GenerateSlugAsync(updatedData.RecipeName);
+                    existingRecipe.RecipeName = updatedData.RecipeName;
+                }
+
+                // Оновлення тегів
+                if (!string.IsNullOrWhiteSpace(updatedData.TagsText))
+                {
+                    var tags = _tagService.ParseTags(updatedData.TagsText);
+                    existingRecipe.Tags = tags;
+                    await _tagService.UpdateGlobalTagsAsync(tags);
+                }
+
+                // Оновлення інгредієнтів
+                if (!string.IsNullOrWhiteSpace(updatedData.IngredientsText))
+                {
+                    var ingredients = _ingredientService.ParseIngredients(updatedData.IngredientsText);
+                    existingRecipe.Ingredients = ingredients;
+                    await _ingredientService.UpdateGlobalIngredientsAsync(ingredients);
+                }
+
+                // Оновлення інструкцій
+                if (!string.IsNullOrWhiteSpace(updatedData.InstructionsText))
+                {
+                    existingRecipe.InstructionsText = updatedData.InstructionsText;
+                }
+
+                // Оновлення решти полів, якщо вони передані
+                if (updatedData.PreparationTimeMinutes > 0)
+                {
+                    existingRecipe.PreparationTimeMinutes = updatedData.PreparationTimeMinutes;
+                }
+                if (!string.IsNullOrWhiteSpace(updatedData.PhotoUrl))
+                {
+                    existingRecipe.PhotoUrl = updatedData.PhotoUrl;
+                }
+                if (!string.IsNullOrWhiteSpace(updatedData.VideoUrl))
+                {
+                    existingRecipe.VideoUrl = updatedData.VideoUrl;
+                }
+                if (updatedData.Holidays != Models.Holiday.None)
+                {
+                    existingRecipe.Holidays = updatedData.Holidays;
+                }
+
+                // Перевірка валідності рецепта
+                existingRecipe.Validate();
+
+                // Оновлення рецепта в базі
+                var filter = Builders<Recipe>.Filter.Eq(r => r.Id, recipeId);
+                await _recipes.ReplaceOneAsync(filter, existingRecipe);
+            }
+            catch (Exception ex)
             {
-                // Генерація слага
-                updatedRecipe.Slug = await GenerateSlugAsync(updatedRecipe.RecipeName);
+                throw new InvalidOperationException($"Помилка під час оновлення рецепта: {ex.Message}");
             }
-            else
-            {
-                updatedRecipe.Slug = existingRecipe.Slug;
-            }
-
-            updatedRecipe.Id = existingRecipe.Id;
-
-            // Обробка тегів
-            var tags = _tagService.ParseTags(updatedRecipe.TagsText);
-            updatedRecipe.Tags = tags;
-
-            // Оновлення глобальних тегів
-            await _tagService.UpdateGlobalTagsAsync(tags);
-
-            // Обробка інгредієнтів
-            var ingredients = _ingredientService.ParseIngredients(updatedRecipe.IngredientsText);
-            updatedRecipe.Ingredients = ingredients;
-
-            // Оновлення глобального списку інгредієнтів
-            await _ingredientService.UpdateGlobalIngredientsAsync(ingredients);
-
-            // Перевірка валідності оновленого рецепта
-            updatedRecipe.Validate();
-
-            // Оновлення рецепта
-            await _recipes.ReplaceOneAsync(recipe => recipe.Id == id, updatedRecipe);
         }
 
-        public async Task RemoveAsync(string id)
+        public async Task DeleteAsync(string recipeId)
         {
-            var deleteResult = await _recipes.DeleteOneAsync(recipe => recipe.Id == id);
-            if (deleteResult.DeletedCount == 0)
+            try
             {
-                throw new KeyNotFoundException($"Рецепт з ID {id} не знайдено.");
+                // Знайти рецепт у базі даних
+                var existingRecipe = await _recipes.Find(r => r.Id == recipeId).FirstOrDefaultAsync();
+                if (existingRecipe == null)
+                {
+                    throw new KeyNotFoundException($"Рецепт з ID {recipeId} не знайдено.");
+                }
+
+                // Перевірка на участь у конкурсі
+                if (existingRecipe.IsParticipatedInContest)
+                {
+                    throw new InvalidOperationException("Цей рецепт брав участь у конкурсі та не може бути видалений.");
+                }
+
+                // Видалення рецепта
+                var filter = Builders<Recipe>.Filter.Eq(r => r.Id, recipeId);
+                var result = await _recipes.DeleteOneAsync(filter);
+
+                if (result.DeletedCount == 0)
+                {
+                    throw new InvalidOperationException($"Не вдалося видалити рецепт з ID {recipeId}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час видалення рецепта: {ex.Message}");
             }
         }
+
+
     }
 }

@@ -1,5 +1,6 @@
 ﻿using CityOfRecipes_backend.Models;
 using CityOfRecipes_backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CityOfRecipes_backend.Controllers
@@ -16,16 +17,68 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet("searchByTag")]
-        public async Task<IActionResult> SearchByTag([FromQuery] List<string> tags)
+        public async Task<IActionResult> SearchRecipesByTag([FromQuery] string tag)
         {
-            if (tags == null || !tags.Any())
+            if (string.IsNullOrWhiteSpace(tag))
             {
-                return BadRequest("Потрібно вказати хоча б один тег.");
+                return BadRequest(new { Message = "Тег не може бути порожнім." });
             }
 
-            var recipes = await _recipeService.SearchRecipesByTagAsync(tags);
-            return Ok(recipes);
+            try
+            {
+                var recipes = await _recipeService.SearchRecipesByTagAsync(tag);
+
+                // Формуємо список результатів
+                var results = recipes.Select(recipe => new
+                {
+                    recipe.Id,
+                    recipe.RecipeName,
+                    recipe.CategoryId,
+                    recipe.AuthorId,
+                    recipe.PreparationTimeMinutes,
+                    recipe.Tags,
+                    recipe.PhotoUrl,
+                    recipe.AverageRating,
+                    recipe.TotalRatings,
+                    recipe.Slug
+                }).ToList();
+
+                return Ok(results);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
+
+        [HttpGet("searchByString")]
+        public async Task<IActionResult> SearchRecipesByString([FromQuery] string searchQuery)
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                return BadRequest(new { Message = "Рядок пошуку не може бути порожнім." });
+            }
+
+            try
+            {
+                var recipes = await _recipeService.SearchRecipesByStringAsync(searchQuery);
+                if (recipes == null || !recipes.Any())
+                {
+                    return NotFound(new { Message = "Рецепти не знайдено за заданим запитом." });
+                }
+
+                return Ok(recipes);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = $"Помилка під час пошуку: {ex.Message}" });
+            }
+        }
+    
 
         [HttpGet]
         public async Task<ActionResult<object>> GetAllRecipes([FromQuery] int skip = 0, [FromQuery] int limit = 10)
@@ -51,16 +104,45 @@ namespace CityOfRecipes_backend.Controllers
 
 
         [HttpGet("{id:length(24)}")]
-        public async Task<ActionResult<Recipe>> GetRecipeById(string id)
+        public async Task<IActionResult> GetRecipeById(string id)
         {
-            var recipe = await _recipeService.GetByIdAsync(id);
-
-            if (recipe == null)
+            if (string.IsNullOrWhiteSpace(id))
             {
-                return NotFound(new { Message = $"Рецепт з ID {id} не знайдено." });
+                return BadRequest(new { Message = "Необхідно вказати ID рецепта." });
             }
 
-            return Ok(recipe);
+            try
+            {
+                var recipe = await _recipeService.GetByIdAsync(id);
+
+                // Формуємо відповідь
+                return Ok(new
+                {
+                    recipe.Id,
+                    recipe.RecipeName,
+                    recipe.CategoryId,
+                    recipe.AuthorId,
+                    recipe.PreparationTimeMinutes,
+                    recipe.CreatedAt,
+                    recipe.Ingredients,
+                    recipe.InstructionsText,
+                    recipe.Tags,
+                    recipe.PhotoUrl,
+                    recipe.AverageRating,
+                    recipe.TotalRatings,
+                    recipe.Holidays,
+                    recipe.Slug,
+                    recipe.IsParticipatedInContest // Додано для перевірки участі в конкурсі
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
 
         [HttpGet("{slug}")]
@@ -77,6 +159,7 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> CreateRecipe([FromBody] Recipe newRecipe)
         {
             if (newRecipe == null)
@@ -87,7 +170,28 @@ namespace CityOfRecipes_backend.Controllers
             try
             {
                 await _recipeService.CreateAsync(newRecipe);
-                return CreatedAtAction(nameof(GetRecipeById), new { id = newRecipe.Id }, newRecipe);
+                return CreatedAtAction(
+                    nameof(GetRecipeById), 
+                    new { id = newRecipe.Id }, 
+                    new
+                    {
+                        newRecipe.Id,
+                        newRecipe.RecipeName,
+                        newRecipe.CategoryId,
+                        newRecipe.AuthorId,
+                        newRecipe.PreparationTimeMinutes,
+                        newRecipe.CreatedAt,
+                        newRecipe.Ingredients,
+                        newRecipe.IngredientsList,
+                        newRecipe.InstructionsText,
+                        newRecipe.Tags,
+                        newRecipe.PhotoUrl,
+                        newRecipe.AverageRating,
+                        newRecipe.TotalRatings,
+                        newRecipe.Holidays
+                    }
+                    
+                    );
             }
             catch (Exception ex)
             {
@@ -96,44 +200,59 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpPut("{id:length(24)}")]
-        public async Task<IActionResult> UpdateRecipe(string id, [FromBody] Recipe updatedRecipe)
+        [Authorize]
+        public async Task<IActionResult> UpdateRecipe(string id, [FromBody] Recipe updatedData)
         {
-            if (updatedRecipe == null)
+            if (string.IsNullOrWhiteSpace(id) || updatedData == null)
             {
-                return BadRequest(new { Message = "Потрібні оновлені дані рецепту." });
-            }
-
-            var existingRecipe = await _recipeService.GetByIdAsync(id);
-
-            if (existingRecipe == null)
-            {
-                return NotFound(new { Message = $"Рецепт з ID {id} не знайдено." });
+                return BadRequest(new { Message = "Неправильні дані для оновлення." });
             }
 
             try
             {
-                await _recipeService.UpdateAsync(id, updatedRecipe);
-                return NoContent();
+                await _recipeService.UpdateAsync(id, updatedData);
+                return Ok(new { Message = "Рецепт успішно оновлено." });
             }
             catch (InvalidOperationException ex)
             {
-                return Conflict(new { Message = ex.Message });
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
             }
         }
 
         [HttpDelete("{id:length(24)}")]
+        [Authorize]
         public async Task<IActionResult> DeleteRecipe(string id)
         {
-            var recipe = await _recipeService.GetByIdAsync(id);
-
-            if (recipe == null)
+            if (string.IsNullOrWhiteSpace(id))
             {
-                return NotFound(new { Message = $"Рецепт з ID {id} не знайдено." });
+                return BadRequest(new { Message = "Необхідно вказати ID рецепта." });
             }
 
-            await _recipeService.RemoveAsync(id);
-
-            return NoContent();
+            try
+            {
+                await _recipeService.DeleteAsync(id);
+                return Ok(new { Message = "Рецепт успішно видалено." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
     }
 }

@@ -4,6 +4,22 @@ using Microsoft.AspNetCore.Server.HttpSys;
 
 namespace CityOfRecipes_backend.Models
 {
+    [Flags]
+    public enum Holiday
+    {
+        None = 0,
+        Christmas = 1,
+        NewYear = 2,
+        Children = 4,
+        Easter = 8,
+        FirstCourses = 16,
+        SecondCourses = 32,
+        Salads = 64,
+        Baking = 128,
+        Drinks = 256,
+        Canning = 512,
+        Grill = 1024
+    }
     public class Recipe
     {
         [BsonId]
@@ -12,53 +28,75 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("CategoryId")]
         [BsonRepresentation(BsonType.ObjectId)]
-        
-        public string CategoryId { get; set; } = null!;
+        [BsonIgnoreIfNull]
+        public string CategoryId { get; set; } = string.Empty;
 
         [BsonElement("AuthorId")]
         [BsonRepresentation(BsonType.ObjectId)]
-       
-        public string AuthorId { get; set; } = null!;
-
-        [BsonElement("CountryOfOriginId")]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public string? CountryOfOriginId { get; set; }
+        [BsonIgnoreIfNull]
+        public string AuthorId { get; set; } = string.Empty;
 
         [BsonElement("RecipeName")]
         [BsonRequired]
-        public string RecipeName { get; set; } = null!;
+        [BsonIgnoreIfNull]
+        public string RecipeName { get; set; } = string.Empty;
+
+        [BsonElement("PreparationTimeMinutes")]
+        [BsonIgnoreIfNull]
+        public int PreparationTimeMinutes { get; set; } // Час приготування в хвилинах
 
         [BsonElement("CreatedAt")]
-      
+        [BsonIgnoreIfNull]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [BsonElement("IngredientsList")]
+        [BsonIgnoreIfNull]
+        public string IngredientsList { get; set; } = string.Empty; // Список інгредієнтів у довільному форматі
+
         [BsonElement("IngredientsText")]
-        public string IngredientsText { get; set; } = string.Empty; // Вхідний текст інгредієнтів
+        [BsonIgnoreIfNull]
+        public string IngredientsText { get; set; } = string.Empty;
 
         [BsonElement("Ingredients")]
+        [BsonIgnoreIfNull]
         public List<string> Ingredients { get; set; } = new(); // Оброблені інгредієнти
 
         [BsonElement("InstructionsText")]
-       
-        public string InstructionsText { get; set; } = null!;
+        [BsonIgnoreIfNull]
+        public string InstructionsText { get; set; } = string.Empty;
 
         [BsonElement("VideoUrl")]
+        [BsonIgnoreIfNull]
         public string? VideoUrl { get; set; }
 
         [BsonElement("PhotoUrl")]
+        [BsonIgnoreIfNull]
         public string? PhotoUrl { get; set; }
 
         [BsonElement("AverageRating")]
+        [BsonIgnoreIfNull]
         public double AverageRating { get; set; } = 0.0;
 
+        [BsonElement("TotalRatings")]
+        [BsonIgnoreIfNull]
+        public int TotalRatings { get; set; } = 0; // Загальна кількість оцінок
+
         [BsonElement("Slug")]
+        [BsonIgnoreIfNull]
         public string Slug { get; set; } = string.Empty;
 
         [BsonElement("TagsText")]
-        public string TagsText { get; set; } = string.Empty; // Вхідний текст
+        [BsonIgnoreIfNull]
+        public string TagsText { get; set; } = string.Empty;
 
         [BsonElement("Tags")]
+        [BsonIgnoreIfNull]
         public List<string> Tags { get; set; } = new(); // Оброблені теги
+
+        public bool IsParticipatedInContest { get; set; } = false; // За замовчуванням - не брав участі
+
+        [BsonIgnoreIfNull]
+        public Holiday Holidays { get; set; } = Holiday.None;// Святкові прапори
         public void Validate()
         {
             if (RecipeName.Length > 200)

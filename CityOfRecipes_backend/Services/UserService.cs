@@ -293,8 +293,6 @@ namespace CityOfRecipes_backend.Services
             if (!string.IsNullOrEmpty(updatedUser.Email))
                 updates.Add(updateDefinitionBuilder.Set(u => u.Email, updatedUser.Email));
 
-          
-
             if (!string.IsNullOrEmpty(updatedUser.FirstName))
                 updates.Add(updateDefinitionBuilder.Set(u => u.FirstName, updatedUser.FirstName));
 
