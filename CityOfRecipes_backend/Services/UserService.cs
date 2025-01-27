@@ -148,93 +148,105 @@ namespace CityOfRecipes_backend.Services
 
         public async Task<AuthorDto?> GetByIdAsync(string authorId)
         {
-            if (!ObjectId.TryParse(authorId, out _))
+            try
             {
-                throw new ArgumentException("Недійсний формат ідентифікатора автора");
-            }
+                if (!ObjectId.TryParse(authorId, out _))
+                {
+                    throw new ArgumentException("Недійсний формат ідентифікатора автора");
+                }
 
-            var pipeline = new[]
-            {
-        // Фільтр за Id
-        new BsonDocument
-        {
-            { "$match", new BsonDocument
+                var pipeline = new[]
                 {
-                    { "_id", new ObjectId(authorId) }
-                }
-            }
-        },
-        // Зв'язок з містами
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
-                {
-                    { "from", "Cities" },
-                    { "localField", "CityId" },
-                    { "foreignField", "_id" },
-                    { "as", "CityDetails" }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$unwind", new BsonDocument
-                {
-                    { "path", "$CityDetails" },
-                    { "preserveNullAndEmptyArrays", true }
-                }
-            }
-        },
-        // Зв'язок з країнами через місто
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
-                {
-                    { "from", "Countries" },
-                    { "localField", "CityDetails.CountryId" },
-                    { "foreignField", "_id" },
-                    { "as", "CountryDetails" }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$unwind", new BsonDocument
-                {
-                    { "path", "$CountryDetails" },
-                    { "preserveNullAndEmptyArrays", true }
-                }
-            }
-        },
-        // Вибір необхідних полів
-        new BsonDocument
-        {
-            { "$project", new BsonDocument
-                {
-                    { "_id", 1 }, 
-                    { "FirstName", 1 },
-                    { "LastName", 1 },
-                    { "ProfilePhotoUrl", 1 },
-                    { "City", new BsonDocument
-                        {
-                            { "$ifNull", new BsonArray { "$CityDetails.CityName", "Невідоме місто" } }
+                    // Фільтр за Id
+                    new BsonDocument
+                    {
+                        { "$match", new BsonDocument
+                            {
+                                { "_id", new ObjectId(authorId) }
+                            }
                         }
                     },
-                    { "Country", new BsonDocument
-                        {
-                            { "$ifNull", new BsonArray { "$CountryDetails.CountryName", "Невідома країна" } }
+                    // Зв'язок з містами
+                    new BsonDocument
+                    {
+                        { "$lookup", new BsonDocument
+                            {
+                                { "from", "Cities" },
+                                { "localField", "CityId" },
+                                { "foreignField", "_id" },
+                                { "as", "CityDetails" }
+                            }
                         }
                     },
-                    { "RegistrationDate", 1 },
-                    { "Rating", 1 },
-                    { "About", 1 }
-                }
-            }
-        }
-    };
+                    new BsonDocument
+                    {
+                        { "$unwind", new BsonDocument
+                            {
+                                { "path", "$CityDetails" },
+                                { "preserveNullAndEmptyArrays", true }
+                            }
+                        }
+                    },
+                    // Зв'язок з країнами через місто
+                    new BsonDocument
+                    {
+                        { "$lookup", new BsonDocument
+                            {
+                                { "from", "Countries" },
+                                { "localField", "CityDetails.CountryId" },
+                                { "foreignField", "_id" },
+                                { "as", "CountryDetails" }
+                            }
+                        }
+                    },
+                    new BsonDocument
+                    {
+                        { "$unwind", new BsonDocument
+                            {
+                                { "path", "$CountryDetails" },
+                                { "preserveNullAndEmptyArrays", true }
+                            }
+                        }
+                    },
+                    // Вибір необхідних полів
+                    new BsonDocument
+                    {
+                        { "$project", new BsonDocument
+                            {
+                                { "_id", 1 },
+                                { "FirstName", 1 },
+                                { "LastName", 1 },
+                                { "ProfilePhotoUrl", 1 },
+                                { "City", new BsonDocument
+                                    {
+                                        { "$ifNull", new BsonArray { "$CityDetails.CityName", "Невідоме місто" } }
+                                    }
+                                },
+                                { "Country", new BsonDocument
+                                    {
+                                        { "$ifNull", new BsonArray { "$CountryDetails.CountryName", "Невідома країна" } }
+                                    }
+                                },
+                                { "RegistrationDate", 1 },
+                                { "Rating", 1 },
+                                { "About", 1 }
+                            }
+                        }
+                    }
+                };
 
-            var result = await _users.Aggregate<AuthorDto>(pipeline).FirstOrDefaultAsync();
-            return result;
+                var result = await _users.Aggregate<AuthorDto>(pipeline).FirstOrDefaultAsync();
+                return result;
+            }
+            catch (ArgumentException ex)
+            {
+                throw new ArgumentException($"Помилка у форматі ID: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Виникла помилка під час виконання GetByIdAsync: {ex.Message}");
+                throw new InvalidOperationException($"Сталася помилка під час отримання автора: {ex.Message}");
+            }
         }
 
         public async Task<AboutUserDto?> GetAboutMeAsync(string userId)
@@ -275,12 +287,19 @@ namespace CityOfRecipes_backend.Services
         }
         public async Task<List<AuthorDto>> GetPopularAuthorsAsync(int start, int limit)
         {
+            try
+            {
             var authors = await GetAsync(start, limit);
 
             // Сортування за рейтингом
             authors = authors.OrderByDescending(a => a.Rating).ToList();
 
             return authors;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Сталася помилка під час отримання популярних авторів: {ex.Message}");
+            }
         }
 
         public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)

@@ -121,6 +121,8 @@ namespace CityOfRecipes_backend.Services
             await _recipes.Find(recipe => true).ToListAsync();
         public async Task<(List<Recipe>, long)> GetPaginatedRecipesAsync(int skip = 0, int limit = 10)
         {
+            try
+            {
             var totalRecipes = await _recipes.CountDocumentsAsync(recipe => true);
             var recipes = await _recipes
                 .Find(recipe => true)
@@ -129,9 +131,53 @@ namespace CityOfRecipes_backend.Services
                 .ToListAsync();
 
             return (recipes, totalRecipes);
+            }
+            catch (MongoException ex)
+            {
+                throw new InvalidOperationException("Помилка під час отримання даних рецептів з бази даних.", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Сталася несподівана помилка під час виконання запиту.", ex);
+            }
         }
-        public async Task<Recipe> GetBySlugAsync(string slug) =>
-            await _recipes.Find(recipe => recipe.Slug == slug).FirstOrDefaultAsync();
+        public async Task<Recipe> GetBySlugAsync(string slug)
+        {
+            try
+            {
+                // Перевірка на null або порожній slug
+                if (string.IsNullOrWhiteSpace(slug))
+                {
+                    throw new ArgumentException("Slug не може бути порожнім або null.");
+                }
+
+                // Пошук рецепта за slug
+                var recipe = await _recipes.Find(recipe => recipe.Slug == slug).FirstOrDefaultAsync();
+
+                // Якщо рецепт не знайдено
+                if (recipe == null)
+                {
+                    throw new KeyNotFoundException($"Рецепт зі slug '{slug}' не знайдено.");
+                }
+
+                return recipe;
+            }
+            catch (ArgumentException ex)
+            {
+                // Помилка через некоректний параметр
+                throw new InvalidOperationException($"Помилка вхідних даних: {ex.Message}", ex);
+            }
+            catch (MongoException ex)
+            {
+                // Помилка при роботі з MongoDB
+                throw new InvalidOperationException("Помилка доступу до бази даних.", ex);
+            }
+            catch (Exception ex)
+            {
+                // Інші несподівані помилки
+                throw new Exception("Сталася несподівана помилка під час виконання запиту.", ex);
+            }
+        }
 
         public async Task<Recipe?> GetByIdAsync(string recipeId)
         {

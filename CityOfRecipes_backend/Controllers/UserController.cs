@@ -73,6 +73,8 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet("popular-authors")]
         public async Task<ActionResult<List<AuthorDto>>> GetPopularAuthors([FromQuery] int start = 0, [FromQuery] int limit = 4)
         {
+            try
+            {
             if (start < 0)
                 return BadRequest("Параметр 'start' не може бути від'ємним.");
             if (limit <= 0)
@@ -83,6 +85,17 @@ namespace CityOfRecipes_backend.Controllers
             var result = popularAuthors.Select(x => x).ToList();
 
             return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Обробка специфічних винятків із сервісу
+                return StatusCode(500, new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Обробка інших несподіваних винятків
+                return StatusCode(500, new { Message = "Сталася несподівана помилка. Спробуйте пізніше.", Details = ex.Message });
+            }
         }
 
         [HttpGet("aboutme")]

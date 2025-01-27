@@ -83,6 +83,8 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet]
         public async Task<ActionResult<object>> GetAllRecipes([FromQuery] int skip = 0, [FromQuery] int limit = 10)
         {
+            try
+            {
             if (skip < 0 || limit <= 0)
             {
                 return BadRequest("Параметри 'skip' і 'limit' мають бути додатними.");
@@ -100,6 +102,17 @@ namespace CityOfRecipes_backend.Controllers
                 Total = totalRecipes,
                 Recipes = recipes
             });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Обробка бізнес-логічних або специфічних помилок
+                return StatusCode(500, new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Обробка несподіваних помилок
+                return StatusCode(500, new { Message = "Сталася несподівана помилка. Спробуйте пізніше.", Details = ex.Message });
+            }
         }
 
 
@@ -247,14 +260,39 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet("by-slug/{slug}")]
         public async Task<ActionResult<Recipe>> GetRecipeBySlug(string slug)
         {
-            var recipe = await _recipeService.GetBySlugAsync(slug);
-
-            if (recipe == null)
+            try
             {
-                return NotFound($"Рецепт зі слагом '{slug}' не знайдено.");
-            }
+                // Виклик сервісного методу для отримання рецепта
+                var recipe = await _recipeService.GetBySlugAsync(slug);
 
-            return Ok(recipe);
+                // Перевірка, чи знайдено рецепт
+                if (recipe == null)
+                {
+                    return NotFound($"Рецепт зі слагом '{slug}' не знайдено.");
+                }
+
+                return Ok(recipe);
+            }
+            catch (ArgumentException ex)
+            {
+                // Помилка через некоректний параметр
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                // Обробка ситуації, коли рецепт не знайдено
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Помилка виконання бізнес-логіки або доступу до бази даних
+                return StatusCode(500, new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Обробка несподіваних помилок
+                return StatusCode(500, new { Message = "Сталася несподівана помилка.", Details = ex.Message });
+            }
         }
 
         [HttpGet("holiday")]
