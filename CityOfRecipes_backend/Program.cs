@@ -16,6 +16,7 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<MongoDbContext>();
             builder.Services.AddSingleton<UserService>();
             builder.Services.AddSingleton<RecipeService>();
+            builder.Services.AddSingleton<CategoryService>();
             builder.Services.AddSingleton<TagService>();
             builder.Services.AddSingleton<IngredientService>();
             builder.Services.AddSingleton<CityService>();

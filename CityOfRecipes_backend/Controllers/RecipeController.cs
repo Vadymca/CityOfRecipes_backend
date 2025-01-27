@@ -145,7 +145,106 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
-        [HttpGet("{slug}")]
+        [HttpGet("by-author/{authorId}")]
+        public async Task<IActionResult> GetRecipesByAuthorId(string authorId, int page = 1, int pageSize = 10)
+        {
+            if (string.IsNullOrWhiteSpace(authorId))
+            {
+                return BadRequest(new { Message = "Ідентифікатор автора не може бути порожнім." });
+            }
+
+            if (page < 1 || pageSize < 1)
+            {
+                return BadRequest(new { Message = "Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0." });
+            }
+
+            try
+            {
+                var recipes = await _recipeService.GetRecipesByAuthorIdAsync(authorId, page, pageSize);
+                return Ok(recipes);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("by-category/{categoryId}")]
+        public async Task<IActionResult> GetRecipesByCategoryId(string categoryId, int page = 1, int pageSize = 10)
+        {
+            if (string.IsNullOrWhiteSpace(categoryId))
+            {
+                return BadRequest(new { Message = "Ідентифікатор категорії не може бути порожнім." });
+            }
+
+            if (page < 1 || pageSize < 1)
+            {
+                return BadRequest(new { Message = "Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0." });
+            }
+
+            try
+            {
+                var recipes = await _recipeService.GetRecipesByCategoryIdAsync(categoryId, page, pageSize);
+                return Ok(recipes);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [HttpGet("favorites")]
+        [Authorize]
+        public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                // Отримуємо `userId` з токена
+                var userId = User.FindFirst("id")?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
+                }
+
+                // Виклик сервісу для отримання улюблених рецептів
+                var (recipes, totalCount) = await _recipeService.GetFavoriteRecipesByUserIdAsync(userId, page, pageSize);
+
+                // Формування відповіді з пагінацією
+                var response = new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                };
+
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+
+        }
+
+        [HttpGet("by-slug/{slug}")]
         public async Task<ActionResult<Recipe>> GetRecipeBySlug(string slug)
         {
             var recipe = await _recipeService.GetBySlugAsync(slug);
@@ -156,6 +255,31 @@ namespace CityOfRecipes_backend.Controllers
             }
 
             return Ok(recipe);
+        }
+
+        [HttpGet("holiday")]
+        public async Task<IActionResult> GetRecipesByHoliday([FromQuery] Holiday holiday, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                // Виклик сервісу для отримання рецептів за святом
+                var (recipes, totalCount) = await _recipeService.GetRecipesByHolidayAsync(holiday, page, pageSize);
+
+                // Формування відповіді з пагінацією
+                var response = new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
 
         [HttpPost]
@@ -171,8 +295,8 @@ namespace CityOfRecipes_backend.Controllers
             {
                 await _recipeService.CreateAsync(newRecipe);
                 return CreatedAtAction(
-                    nameof(GetRecipeById), 
-                    new { id = newRecipe.Id }, 
+                    nameof(GetRecipeById),
+                    new { id = newRecipe.Id },
                     new
                     {
                         newRecipe.Id,
@@ -190,7 +314,7 @@ namespace CityOfRecipes_backend.Controllers
                         newRecipe.TotalRatings,
                         newRecipe.Holidays
                     }
-                    
+
                     );
             }
             catch (Exception ex)

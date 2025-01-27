@@ -1,24 +1,28 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Server.HttpSys;
+using System.ComponentModel;
 
 namespace CityOfRecipes_backend.Models
 {
     [Flags]
     public enum Holiday
     {
+        [Description("Без свята")]
         None = 0,
+
+        [Description("Різдво")]
         Christmas = 1,
+
+        [Description("Новий рік")]
         NewYear = 2,
+
+        [Description("Дитячий день")]
         Children = 4,
-        Easter = 8,
-        FirstCourses = 16,
-        SecondCourses = 32,
-        Salads = 64,
-        Baking = 128,
-        Drinks = 256,
-        Canning = 512,
-        Grill = 1024
+
+        [Description("Великдень")]
+        Easter = 8
     }
     public class Recipe
     {
@@ -92,6 +96,9 @@ namespace CityOfRecipes_backend.Models
         [BsonElement("Tags")]
         [BsonIgnoreIfNull]
         public List<string> Tags { get; set; } = new(); // Оброблені теги
+
+        [BsonElement("TextScore")]
+        public double? TextScore { get; set; } // Поле для оцінки релевантності
 
         public bool IsParticipatedInContest { get; set; } = false; // За замовчуванням - не брав участі
 

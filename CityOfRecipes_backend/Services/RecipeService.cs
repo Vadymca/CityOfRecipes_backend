@@ -2,20 +2,25 @@
 using CityOfRecipes_backend.Helpers;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using Microsoft.OpenApi.Extensions;
 
 namespace CityOfRecipes_backend.Services
 {
     public class RecipeService
     {
         private readonly IMongoCollection<Recipe> _recipes;
+        private readonly IMongoCollection<User> _users;
         private readonly TagService _tagService;
         private readonly IngredientService _ingredientService;
+        
 
-        public RecipeService(IOptions<MongoDBSettings> mongoSettings, TagService tagService, IngredientService ingredientService)
+        public RecipeService(IOptions<MongoDBSettings> mongoSettings, 
+            TagService tagService, IngredientService ingredientService, UserService userService)
         {
             var client = new MongoClient(mongoSettings.Value.ConnectionString);
             var database = client.GetDatabase(mongoSettings.Value.DatabaseName);
             _recipes = database.GetCollection<Recipe>("Recipes");
+            _users = database.GetCollection<User>("Users");
             _tagService = tagService;
             _ingredientService = ingredientService;
             CreateIndexesAsync().Wait();
@@ -144,6 +149,141 @@ namespace CityOfRecipes_backend.Services
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Помилка під час отримання рецепта: {ex.Message}");
+            }
+        }
+
+        public async Task<List<Recipe>> GetRecipesByAuthorIdAsync(string authorId, int page = 1, int pageSize = 10)
+        {
+            if (string.IsNullOrWhiteSpace(authorId))
+            {
+                throw new ArgumentException("Ідентифікатор автора не може бути порожнім.");
+            }
+
+            if (page < 1 || pageSize < 1)
+            {
+                throw new ArgumentException("Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0.");
+            }
+
+            try
+            {
+                // Фільтр: знайти всі рецепти, у яких AuthorId відповідає переданому значенню
+                var filter = Builders<Recipe>.Filter.Eq(r => r.AuthorId, authorId);
+
+                // Пропустити рецепти попередніх сторінок і взяти лише поточну сторінку
+                var recipes = await _recipes.Find(filter)
+                                            .Skip((page - 1) * pageSize)
+                                            .Limit(pageSize)
+                                            .ToListAsync();
+
+                return recipes;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час отримання рецептів для автора з ID '{authorId}': {ex.Message}");
+            }
+        }
+
+        public async Task<List<Recipe>> GetRecipesByCategoryIdAsync(string categoryId, int page = 1, int pageSize = 10)
+        {
+            if (string.IsNullOrWhiteSpace(categoryId))
+            {
+                throw new ArgumentException("Ідентифікатор категорії не може бути порожнім.");
+            }
+
+            if (page < 1 || pageSize < 1)
+            {
+                throw new ArgumentException("Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0.");
+            }
+
+            try
+            {
+                // Фільтр: знайти всі рецепти, у яких CategoryId відповідає переданому значенню
+                var filter = Builders<Recipe>.Filter.Eq(r => r.CategoryId, categoryId);
+
+                // Пропустити рецепти попередніх сторінок і взяти лише поточну сторінку
+                var recipes = await _recipes.Find(filter)
+                                            .Skip((page - 1) * pageSize)
+                                            .Limit(pageSize)
+                                            .ToListAsync();
+
+                return recipes;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час отримання рецептів для категорії з ID '{categoryId}': {ex.Message}");
+            }
+        }
+
+        public async Task<(List<Recipe>, long)> GetFavoriteRecipesByUserIdAsync(string userId, int page, int pageSize)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.");
+            }
+
+            if (page <= 0 || pageSize <= 0)
+            {
+                throw new ArgumentException("Параметри пагінації мають бути більше нуля.");
+            }
+
+            try
+            {
+                // Отримуємо користувача
+                var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+
+                if (user == null)
+                {
+                    throw new KeyNotFoundException("Користувача не знайдено.");
+                }
+
+                if (user.FavoriteRecipes == null || !user.FavoriteRecipes.Any())
+                {
+                    return (new List<Recipe>(), 0); // Якщо немає улюблених рецептів
+                }
+
+                // Загальна кількість улюблених рецептів
+                var totalCount = user.FavoriteRecipes.Count;
+
+                // Виконуємо пагінацію на стороні серверу
+                var paginatedRecipes = user.FavoriteRecipes
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return (paginatedRecipes, totalCount);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час отримання улюблених рецептів: {ex.Message}");
+            }
+        }
+
+        public async Task<(List<Recipe>, long)> GetRecipesByHolidayAsync(Holiday holiday, int page, int pageSize)
+        {
+            if (page <= 0 || pageSize <= 0)
+            {
+                throw new ArgumentException("Параметри пагінації мають бути більше нуля.");
+            }
+
+            try
+            {
+                // Фільтр для бітового порівняння
+                var filter = Builders<Recipe>.Filter.Where(r => (r.Holidays & holiday) == holiday);
+
+                // Загальна кількість рецептів для свята
+                var totalCount = await _recipes.CountDocumentsAsync(filter);
+
+                // Отримуємо рецепти з пагінацією
+                var recipes = await _recipes.Find(filter)
+                                            .Skip((page - 1) * pageSize)
+                                            .Limit(pageSize)
+                                            .ToListAsync();
+
+                return (recipes, totalCount);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час отримання рецептів за святом: {ex.Message}");
             }
         }
 
