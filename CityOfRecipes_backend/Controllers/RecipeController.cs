@@ -111,7 +111,7 @@ namespace CityOfRecipes_backend.Controllers
             catch (Exception ex)
             {
                 // Обробка несподіваних помилок
-                return StatusCode(500, new { Message = "Сталася несподівана помилка. Спробуйте пізніше.", Details = ex.Message });
+                return StatusCode(500, new { Message = "Сталася несподівана помилка. Спробуйте пізніше." });
             }
         }
 
@@ -291,7 +291,7 @@ namespace CityOfRecipes_backend.Controllers
             catch (Exception ex)
             {
                 // Обробка несподіваних помилок
-                return StatusCode(500, new { Message = "Сталася несподівана помилка.", Details = ex.Message });
+                return StatusCode(500, new { Message = ex.Message });
             }
         }
 

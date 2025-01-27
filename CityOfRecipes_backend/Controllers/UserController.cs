@@ -42,7 +42,7 @@ namespace CityOfRecipes_backend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { Message = "Сталася непередбачена помилка", Details = ex.Message });
+                return StatusCode(500, new { Message = ex.Message });
             }
         }
 
@@ -94,7 +94,7 @@ namespace CityOfRecipes_backend.Controllers
             catch (Exception ex)
             {
                 // Обробка інших несподіваних винятків
-                return StatusCode(500, new { Message = "Сталася несподівана помилка. Спробуйте пізніше.", Details = ex.Message });
+                return StatusCode(500, new { Message = ex.Message });
             }
         }
 
@@ -160,7 +160,7 @@ namespace CityOfRecipes_backend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Внутрішня помилка сервера: {ex.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError,$"Внутрішня помилка сервера: {ex.Message}");
             }
         }
 
