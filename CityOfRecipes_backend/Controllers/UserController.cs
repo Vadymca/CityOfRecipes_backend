@@ -23,6 +23,8 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet]
         public async Task<ActionResult<List<AuthorDto>>> GetAllUsers([FromQuery] int start = 0, [FromQuery] int limit = 10)
         {
+            try
+            {
             if (start < 0)
                 return BadRequest("Параметр 'start' не може бути від'ємним.");
             if (limit <= 0)
@@ -33,6 +35,15 @@ namespace CityOfRecipes_backend.Controllers
             var result = users.Select(x => x).ToList();
 
             return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = "Сталася непередбачена помилка", Details = ex.Message });
+            }
         }
 
 

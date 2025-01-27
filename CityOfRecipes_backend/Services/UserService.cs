@@ -33,8 +33,10 @@ namespace CityOfRecipes_backend.Services
 
         public async Task<List<AuthorDto>> GetAsync(int start, int limit)
         {
-            var pipeline = new[]
+            try
             {
+                var pipeline = new[]
+                {
         // Зв'язок з рецептами
         new BsonDocument
         {
@@ -117,26 +119,31 @@ namespace CityOfRecipes_backend.Services
         }
     };
 
-            var results = await _users.Aggregate<BsonDocument>(pipeline).ToListAsync();
+                var results = await _users.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
-            // Формування DTO
-            return results.Select(result =>
-            {
-                var author = new AuthorDto
+                // Формування DTO
+                return results.Select(result =>
                 {
-                    Id = result["Id"].ToString(),
-                    FirstName = result.Contains("FirstName") ? result["FirstName"].ToString() : null,
-                    LastName = result.Contains("LastName") ? result["LastName"].ToString() : null,
-                    ProfilePhotoUrl = result.Contains("ProfilePhotoUrl") ? result["ProfilePhotoUrl"].ToString() : null,
-                    City = result.Contains("City") ? result["City"].ToString() : "Невідоме місто",
-                    Country = result.Contains("Country") ? result["Country"].ToString() : "Невідома країна",
-                    RegistrationDate = result.Contains("RegistrationDate") ? result["RegistrationDate"].ToUniversalTime() : DateTime.MinValue,
-                    Rating = result.Contains("Rating") ? result["Rating"].ToDouble() : 0,
-                    About = result.Contains("About") ? result["About"].ToString() : null
-                };
+                    var author = new AuthorDto
+                    {
+                        Id = result["Id"].ToString(),
+                        FirstName = result.Contains("FirstName") ? result["FirstName"].ToString() : null,
+                        LastName = result.Contains("LastName") ? result["LastName"].ToString() : null,
+                        ProfilePhotoUrl = result.Contains("ProfilePhotoUrl") ? result["ProfilePhotoUrl"].ToString() : null,
+                        City = result.Contains("City") ? result["City"].ToString() : "Невідоме місто",
+                        Country = result.Contains("Country") ? result["Country"].ToString() : "Невідома країна",
+                        RegistrationDate = result.Contains("RegistrationDate") ? result["RegistrationDate"].ToUniversalTime() : DateTime.MinValue,
+                        Rating = result.Contains("Rating") ? result["Rating"].ToDouble() : 0,
+                        About = result.Contains("About") ? result["About"].ToString() : null
+                    };
 
-                return author;
-            }).ToList();
+                    return author;
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка: {ex.Message}");
+            }
         }
 
         public async Task<AuthorDto?> GetByIdAsync(string authorId)
