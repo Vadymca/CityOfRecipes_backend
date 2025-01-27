@@ -20,30 +20,51 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet]
         public async Task<ActionResult<List<City>>> GetAll()
         {
-            var cities = await _cityService.GetAllAsync();
-            return Ok(cities);
+            try
+            {
+                var cities = await _cityService.GetAllAsync();
+                return Ok(cities);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Сталася помилка при отриманні міст: {ex.Message}");
+            }
         }
 
         // GET: api/cities/{id}
         [HttpGet("{id:length(24)}")]
         public async Task<ActionResult<City>> GetById(string id)
         {
-            var city = await _cityService.GetByIdAsync(id);
-
-            if (city == null)
+            try
             {
-                return NotFound($"Місто з ID '{id}' не знайдено.");
-            }
+                var city = await _cityService.GetByIdAsync(id);
 
-            return Ok(city);
+                if (city == null)
+                {
+                    return NotFound($"Місто з ID '{id}' не знайдено.");
+                }
+
+                return Ok(city);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
 
         // GET: api/cities/byCountry/{countryId}
         [HttpGet("byCountry/{countryId:length(24)}")]
         public async Task<ActionResult<List<City>>> GetByCountryId(string countryId)
         {
-            var cities = await _cityService.GetByCountryIdAsync(countryId);
-            return Ok(cities);
+            try
+            {
+                var cities = await _cityService.GetByCountryIdAsync(countryId);
+                return Ok(cities);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
 
         // POST: api/cities
@@ -53,11 +74,15 @@ namespace CityOfRecipes_backend.Controllers
             try
             {
                 await _cityService.CreateAsync(city);
-                return Ok(city);
+                return CreatedAtAction(nameof(GetById), new { id = city.Id }, city);
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest($"Невірні дані: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
             }
         }
 
@@ -65,21 +90,25 @@ namespace CityOfRecipes_backend.Controllers
         [HttpPut("{id:length(24)}")]
         public async Task<IActionResult> Update(string id, City updatedCity)
         {
-            var city = await _cityService.GetByIdAsync(id);
-            if (city == null)
-            {
-                return NotFound($"Місто з ID '{id}' не знайдено.");
-            }
-
             try
             {
+                var city = await _cityService.GetByIdAsync(id);
+                if (city == null)
+                {
+                    return NotFound($"Місто з ID '{id}' не знайдено.");
+                }
+
                 updatedCity.Id = id; // Зберігаємо ID для оновлення
                 await _cityService.UpdateAsync(id, updatedCity);
                 return NoContent();
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest($"Невірні дані для оновлення: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
             }
         }
 
@@ -87,8 +116,21 @@ namespace CityOfRecipes_backend.Controllers
         [HttpDelete("{id:length(24)}")]
         public async Task<IActionResult> Delete(string id)
         {
-            await _cityService.DeleteAsync(id);
-            return NoContent();
+            try
+            {
+                var city = await _cityService.GetByIdAsync(id);
+                if (city == null)
+                {
+                    return NotFound($"Місто з ID '{id}' не знайдено.");
+                }
+
+                await _cityService.DeleteAsync(id);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
     }
 }
