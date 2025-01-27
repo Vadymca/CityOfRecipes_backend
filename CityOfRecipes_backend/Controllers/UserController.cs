@@ -136,7 +136,7 @@ namespace CityOfRecipes_backend.Controllers
         {
             if (string.IsNullOrEmpty(userId) || updatedUser == null)
             {
-                return BadRequest("Необхідні ідентифікатор користувача та оновлені дані користувача.");
+                return BadRequest(new { message = "Необхідні ідентифікатор користувача та оновлені дані користувача." });
             }
 
             try
@@ -145,22 +145,22 @@ namespace CityOfRecipes_backend.Controllers
 
                 if (updatedUserDto == null)
                 {
-                    return NotFound($"Користувач з ID {userId} не знайдено.");
+                    return NotFound(new { message = $"Користувач з ID {userId} не знайдено." });
                 }
 
-                return Ok(updatedUserDto);
+                return Ok(new {  user = updatedUserDto });
             }
             catch (ArgumentNullException ex)
             {
-                return BadRequest($"Невірні дані: {ex.Message}");
+                return BadRequest(new {  error = ex.Message });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest($"Помилка: {ex.Message}");
+                return BadRequest(new {  error = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError,$"Внутрішня помилка сервера: {ex.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
             }
         }
 

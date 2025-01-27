@@ -27,11 +27,7 @@ namespace CityOfRecipes_backend.DTOs
         public string? ProfilePhotoUrl { get; set; } // Фото профілю необов’язкове
 
         [BsonIgnoreIfNull]
-        public string? City { get; set; } // Місто може бути null
-
-        [BsonIgnoreIfNull]
-        public string? Country { get; set; } // Країна може бути null
-
+        public string? CityId { get; set; } // Місто може бути null
         
     }
 }

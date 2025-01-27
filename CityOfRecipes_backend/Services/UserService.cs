@@ -304,100 +304,115 @@ namespace CityOfRecipes_backend.Services
 
         public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
         {
-            if (string.IsNullOrEmpty(userId))
-                throw new ArgumentNullException(nameof(userId), "Ідентифікатор користувача не може бути пустим.");
-
-            // Завантажуємо поточного користувача з бази
-            var existingUser = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
-            if (existingUser == null)
-                throw new Exception("Користувача з вказаним ID не знайдено.");
-
-            var updates = new List<UpdateDefinition<User>>();
-            var updateDefinitionBuilder = Builders<User>.Update;
-
-            // Оновлюємо лише ті поля, які передані (перевірка на null):
-            if (!string.IsNullOrEmpty(updatedUser.Email))
-                updates.Add(updateDefinitionBuilder.Set(u => u.Email, updatedUser.Email));
-
-            if (!string.IsNullOrEmpty(updatedUser.FirstName))
-                updates.Add(updateDefinitionBuilder.Set(u => u.FirstName, updatedUser.FirstName));
-
-            if (!string.IsNullOrEmpty(updatedUser.LastName))
-                updates.Add(updateDefinitionBuilder.Set(u => u.LastName, updatedUser.LastName));
-
-            if (!string.IsNullOrEmpty(updatedUser.About))
-                updates.Add(updateDefinitionBuilder.Set(u => u.About, updatedUser.About));
-
-            if (!string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl))
-                updates.Add(updateDefinitionBuilder.Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl));
-
-            // Обробляємо поле City, якщо воно передане
-            if (updatedUser.City != null)
+            try
             {
-                if (string.IsNullOrWhiteSpace(updatedUser.City))
-                {
-                    // Якщо поле передане як пустий рядок або пробіли, очищуємо CityId
-                    updates.Add(updateDefinitionBuilder.Set(u => u.CityId, null));
-                }
-                else if (ObjectId.TryParse(updatedUser.City, out _))
-                {
-                    // Якщо City є валідним ObjectId, виконуємо пошук у базі
-                    var city = await _cities.Find(c => c.Id == updatedUser.City).FirstOrDefaultAsync();
-                    if (city == null)
-                        throw new Exception("Місто з вказаним ID не знайдено.");
+                if (string.IsNullOrEmpty(userId))
+                    throw new ArgumentNullException(nameof(userId), "Ідентифікатор користувача не може бути пустим.");
 
-                    // Додаємо оновлення, якщо місто знайдено
-                    updates.Add(updateDefinitionBuilder.Set(u => u.CityId, city.Id));
-                }
-                else
-                {
-                    // Якщо City не є валідним ObjectId, викидаємо помилку
-                    throw new ArgumentException($"CityId '{updatedUser.City}' не є валідним ObjectId.");
-                }
-            }
+                // Завантажуємо поточного користувача з бази
+                var existingUser = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+                if (existingUser == null)
+                    throw new Exception("Користувача з вказаним ID не знайдено.");
 
-            // Якщо немає оновлень, нічого не змінюємо
-            if (!updates.Any())
+                var updates = new List<UpdateDefinition<User>>();
+                var updateDefinitionBuilder = Builders<User>.Update;
+
+                // Оновлюємо лише ті поля, які передані (перевірка на null):
+                if (!string.IsNullOrEmpty(updatedUser.Email))
+                    updates.Add(updateDefinitionBuilder.Set(u => u.Email, updatedUser.Email));
+
+                if (!string.IsNullOrEmpty(updatedUser.FirstName))
+                    updates.Add(updateDefinitionBuilder.Set(u => u.FirstName, updatedUser.FirstName));
+
+                if (!string.IsNullOrEmpty(updatedUser.LastName))
+                    updates.Add(updateDefinitionBuilder.Set(u => u.LastName, updatedUser.LastName));
+
+                if (!string.IsNullOrEmpty(updatedUser.About))
+                    updates.Add(updateDefinitionBuilder.Set(u => u.About, updatedUser.About));
+
+                if (!string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl))
+                    updates.Add(updateDefinitionBuilder.Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl));
+
+                // Обробляємо поле City, якщо воно передане
+                if (updatedUser.CityId != null)
+                {
+                    if (string.IsNullOrWhiteSpace(updatedUser.CityId))
+                    {
+                        // Якщо поле передане як пустий рядок або пробіли, очищуємо CityId
+                        updates.Add(updateDefinitionBuilder.Set(u => u.CityId, null));
+                    }
+                    else if (ObjectId.TryParse(updatedUser.CityId, out _))
+                    {
+                        // Якщо City є валідним ObjectId, виконуємо пошук у базі
+                        var city = await _cities.Find(c => c.Id == updatedUser.CityId).FirstOrDefaultAsync();
+                        if (city == null)
+                            throw new Exception("Місто з вказаним ID не знайдено.");
+
+                        // Додаємо оновлення, якщо місто знайдено
+                        updates.Add(updateDefinitionBuilder.Set(u => u.CityId, city.Id));
+                    }
+                    else
+                    {
+                        // Якщо City не є валідним ObjectId, викидаємо помилку
+                        throw new ArgumentException($"CityId '{updatedUser.CityId}' не є валідним ObjectId.");
+                    }
+                }
+
+                // Якщо немає оновлень, нічого не змінюємо
+                if (!updates.Any())
+                    return new UserDto
+                    {
+                        Id = existingUser.Id,
+                        Email = existingUser.Email,
+                        FirstName = existingUser.FirstName,
+                        LastName = existingUser.LastName,
+                        About = existingUser.About,
+                        ProfilePhotoUrl = existingUser.ProfilePhotoUrl,
+                        CityId = existingUser.CityId,
+                    };
+
+                // Комбінуємо всі оновлення
+                var updateDefinition = updateDefinitionBuilder.Combine(updates);
+                var result = await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
+
+                if (result.MatchedCount == 0)
+                    return null;
+
+                // Повертаємо оновлені дані користувача
+                var updatedCity = existingUser.CityId != null
+                    ? await _cities.Find(c => c.Id == existingUser.CityId).FirstOrDefaultAsync()
+                    : null;
+
+                var updatedCountry = updatedCity != null
+                    ? await _countries.Find(c => c.Id == updatedCity.CountryId).FirstOrDefaultAsync()
+                    : null;
+
                 return new UserDto
                 {
-                    Id = existingUser.Id,
-                    Email = existingUser.Email,
-                    FirstName = existingUser.FirstName,
-                    LastName = existingUser.LastName,
-                    About = existingUser.About,
-                    ProfilePhotoUrl = existingUser.ProfilePhotoUrl,
-                    City = existingUser.CityId,
-                    Country = null
+                    Id = userId,
+                    Email = !string.IsNullOrEmpty(updatedUser.Email) ? updatedUser.Email : existingUser.Email,
+                    FirstName = !string.IsNullOrEmpty(updatedUser.FirstName) ? updatedUser.FirstName : existingUser.FirstName,
+                    LastName = !string.IsNullOrEmpty(updatedUser.LastName) ? updatedUser.LastName : existingUser.LastName,
+                    About = !string.IsNullOrEmpty(updatedUser.About) ? updatedUser.About : existingUser.About,
+                    ProfilePhotoUrl = !string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl) ? updatedUser.ProfilePhotoUrl : existingUser.ProfilePhotoUrl,
+                    CityId = !string.IsNullOrEmpty(updatedUser.CityId) ? updatedUser.CityId : existingUser.CityId
                 };
-
-            // Комбінуємо всі оновлення
-            var updateDefinition = updateDefinitionBuilder.Combine(updates);
-            var result = await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
-
-            if (result.MatchedCount == 0)
-                return null;
-
-            // Повертаємо оновлені дані користувача
-            var updatedCity = existingUser.CityId != null
-                ? await _cities.Find(c => c.Id == existingUser.CityId).FirstOrDefaultAsync()
-                : null;
-
-            var updatedCountry = updatedCity != null
-                ? await _countries.Find(c => c.Id == updatedCity.CountryId).FirstOrDefaultAsync()
-                : null;
-
-            return new UserDto
+            }
+            catch (ArgumentNullException ex)
             {
-                Id = userId,
-                Email = !string.IsNullOrEmpty(updatedUser.Email) ? updatedUser.Email : existingUser.Email,
-                FirstName = !string.IsNullOrEmpty(updatedUser.FirstName) ? updatedUser.FirstName : existingUser.FirstName,
-                LastName = !string.IsNullOrEmpty(updatedUser.LastName) ? updatedUser.LastName : existingUser.LastName,
-                About = !string.IsNullOrEmpty(updatedUser.About) ? updatedUser.About : existingUser.About,
-                ProfilePhotoUrl = !string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl) ? updatedUser.ProfilePhotoUrl : existingUser.ProfilePhotoUrl,
-                City = updatedCity.CityName, 
-                Country = updatedCountry?.CountryName,
-                
-            };
+                // Обробка помилки, коли userId порожній
+                throw new InvalidOperationException($"Помилка: {ex.Message}", ex);
+            }
+            catch (ArgumentException ex)
+            {
+                // Обробка помилки при невалідному параметрі
+                throw new InvalidOperationException($"Помилка: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                // Загальна обробка всіх інших помилок
+                throw new InvalidOperationException("Помилка при оновленні користувача.", ex);
+            }
         }
 
         private string HashPassword(string password)
