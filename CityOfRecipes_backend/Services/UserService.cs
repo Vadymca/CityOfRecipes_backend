@@ -334,18 +334,21 @@ namespace CityOfRecipes_backend.Services
                 if (!string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl))
                     updates.Add(updateDefinitionBuilder.Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl));
 
-                // Перевірка: чи відповідає пароль вимогам
-                if (!IsValidPassword(updatedUser.Password))
-                    throw new ArgumentException(
-                        "Пароль має бути не менше 6 символів, містити хоча б одну велику букву, одну малу букву та одну цифру.",
-                        nameof(updatedUser.Password));
+                if (!string.IsNullOrEmpty(updatedUser.Password))
+                {
+                    // Перевірка: чи відповідає пароль вимогам
+                    if (!IsValidPassword(updatedUser.Password))
+                        throw new ArgumentException(
+                            "Пароль має бути не менше 6 символів, містити хоча б одну велику букву, одну малу букву та одну цифру.",
+                            nameof(updatedUser.Password));
 
-                newPassword = updatedUser.Password;
+                    newPassword = updatedUser.Password;
 
-                // Генеруємо хеш нового пароля
-                var newHashedPassword = HashPassword(updatedUser.Password);
+                    // Генеруємо хеш нового пароля
+                    var newHashedPassword = HashPassword(updatedUser.Password);
 
-                updates.Add(updateDefinitionBuilder.Set(u => u.PasswordHash, newHashedPassword));
+                    updates.Add(updateDefinitionBuilder.Set(u => u.PasswordHash, newHashedPassword));
+                }
 
                 // Обробляємо поле City, якщо воно передане
                 if (updatedUser.CityId != null)

@@ -214,8 +214,8 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
-        [HttpGet("favorites")]
-        [Authorize]
+        //[HttpGet("favorites")]
+        //[Authorize]
         //public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         //{
         //    try
