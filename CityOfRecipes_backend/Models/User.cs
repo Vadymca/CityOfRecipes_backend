@@ -56,11 +56,11 @@ namespace CityOfRecipes_backend.Models
 
         [BsonElement("FavoriteRecipes")]
         [BsonIgnoreIfNull]
-        public ICollection<Recipe>? FavoriteRecipes { get; set; }
+        public ICollection<string>? FavoriteRecipes { get; set; }
 
         [BsonElement("FavoriteAuthors")]
         [BsonIgnoreIfNull]
-        public ICollection<User>? FavoriteAuthors { get; set; }
+        public ICollection<ObjectId>? FavoriteAuthors { get; set; }
 
         [BsonElement("EmailConfirmed")]
         public bool EmailConfirmed { get; set; } = false;

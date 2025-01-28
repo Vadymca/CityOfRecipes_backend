@@ -216,46 +216,46 @@ namespace CityOfRecipes_backend.Controllers
 
         [HttpGet("favorites")]
         [Authorize]
-        public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
-        {
-            try
-            {
-                // Отримуємо `userId` з токена
-                var userId = User.FindFirst("id")?.Value;
+        //public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        //{
+        //    try
+        //    {
+        //        // Отримуємо `userId` з токена
+        //        var userId = User.FindFirst("id")?.Value;
 
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
-                }
+        //        if (string.IsNullOrEmpty(userId))
+        //        {
+        //            return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
+        //        }
 
-                // Виклик сервісу для отримання улюблених рецептів
-                var (recipes, totalCount) = await _recipeService.GetFavoriteRecipesByUserIdAsync(userId, page, pageSize);
+        //        // Виклик сервісу для отримання улюблених рецептів
+        //        var (recipes, totalCount) = await _recipeService.GetFavoriteRecipesByUserIdAsync(userId, page, pageSize);
 
-                // Формування відповіді з пагінацією
-                var response = new
-                {
-                    TotalCount = totalCount,
-                    Page = page,
-                    PageSize = pageSize,
-                    Recipes = recipes
-                };
+        //        // Формування відповіді з пагінацією
+        //        var response = new
+        //        {
+        //            TotalCount = totalCount,
+        //            Page = page,
+        //            PageSize = pageSize,
+        //            Recipes = recipes
+        //        };
 
-                return Ok(response);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest($"Помилка: {ex.Message}");
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { Message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = ex.Message });
-            }
+        //        return Ok(response);
+        //    }
+        //    catch (ArgumentException ex)
+        //    {
+        //        return BadRequest($"Помилка: {ex.Message}");
+        //    }
+        //    catch (KeyNotFoundException ex)
+        //    {
+        //        return NotFound(new { Message = ex.Message });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return BadRequest(new { Message = ex.Message });
+        //    }
 
-        }
+        //}
 
         [HttpGet("by-slug/{slug}")]
         public async Task<ActionResult<Recipe>> GetRecipeBySlug(string slug)

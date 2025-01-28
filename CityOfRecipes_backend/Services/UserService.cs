@@ -5,6 +5,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Org.BouncyCastle.Crypto.Generators;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -621,6 +622,114 @@ namespace CityOfRecipes_backend.Services
                 throw new Exception($"Помилка при скиданні пароля: {ex.Message}");
             }
         }
+
+        public async Task<bool> ToggleFavoriteAuthorAsync(string userId, string authorId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                throw new ArgumentException("Ідентифікатор користувача не може бути пустим.", nameof(userId));
+
+            if (string.IsNullOrEmpty(authorId))
+                throw new ArgumentException("Ідентифікатор автора не може бути пустим.", nameof(authorId));
+
+            // Перетворюємо authorId у ObjectId
+            if (!ObjectId.TryParse(authorId, out ObjectId authorObjectId))
+                throw new ArgumentException("Невірний формат ідентифікатора автора.", nameof(authorId));
+
+            // Завантажуємо користувача
+            var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (user == null)
+                throw new KeyNotFoundException("Користувача з вказаним ID не знайдено.");
+
+            // Якщо список улюблених авторів ще не ініціалізований
+            if (user.FavoriteAuthors == null)
+            {
+                user.FavoriteAuthors = new List<ObjectId> { authorObjectId };
+            }
+            else
+            {
+                // Додаємо або видаляємо автора
+                if (user.FavoriteAuthors.Contains(authorObjectId))
+                {
+                    user.FavoriteAuthors.Remove(authorObjectId); // Видаляємо з улюблених
+                }
+                else
+                {
+                    user.FavoriteAuthors.Add(authorObjectId); // Додаємо в улюблені
+                }
+            }
+
+            // Оновлюємо користувача в базі
+            var updateDefinition = Builders<User>.Update.Set(u => u.FavoriteAuthors, user.FavoriteAuthors);
+            var updateResult = await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
+
+            return updateResult.ModifiedCount > 0;
+        }
+
+        public async Task<List<AuthorDto>> GetFavoriteAuthorsAsync(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.", nameof(userId));
+
+            // Отримуємо користувача з бази
+            var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+            if (user == null)
+                throw new KeyNotFoundException("Користувача з вказаним ID не знайдено.");
+
+            // Якщо у користувача немає улюблених авторів, повертаємо порожній список
+            if (user.FavoriteAuthors == null || !user.FavoriteAuthors.Any())
+                return new List<AuthorDto>();
+
+            // Перетворюємо список ObjectId у користувача на список строкових ID
+            var favoriteAuthorIds = user.FavoriteAuthors.Select(id => id.ToString()).ToList();
+
+            // Отримуємо улюблених авторів, використовуючи їх ObjectId
+            var favoriteAuthors = await _users
+                .Find(u => favoriteAuthorIds.Contains(u.Id)) // Порівнюємо у вигляді рядків
+                .ToListAsync();
+
+            // Отримуємо ID міст та країн
+            var cityIds = favoriteAuthors
+                .Where(author => author.CityId != null)
+                .Select(author => author.CityId)
+                .Distinct()
+                .ToList();
+
+            var cities = await _cities.Find(c => cityIds.Contains(c.Id)).ToListAsync();
+
+            var countryIds = cities
+                .Where(city => city.CountryId != null)
+                .Select(city => city.CountryId)
+                .Distinct()
+                .ToList();
+
+            var countries = await _countries.Find(c => countryIds.Contains(c.Id)).ToListAsync();
+
+            // Формуємо список AuthorDto
+            var authorDtos = favoriteAuthors.Select(author =>
+            {
+                var city = cities.FirstOrDefault(c => c.Id == author.CityId);
+                var country = city != null ? countries.FirstOrDefault(c => c.Id == city.CountryId) : null;
+
+                return new AuthorDto
+                {
+                    Id = author.Id.ToString(), // Перетворення ObjectId в рядок
+                    FirstName = author.FirstName,
+                    LastName = author.LastName,
+                    ProfilePhotoUrl = author.ProfilePhotoUrl,
+                    City = city?.CityName ?? "Невідоме місто",
+                    Country = country?.CountryName ?? "Невідома країна",
+                    RegistrationDate = author.RegistrationDate,
+                    Rating = author.Rating,
+                    About = author.About
+                };
+            }).ToList();
+
+            return authorDtos;
+        }
+
+
+
+
 
         private bool IsValidPassword(string password)
         {

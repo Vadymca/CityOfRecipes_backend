@@ -260,49 +260,49 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        public async Task<(List<Recipe>, long)> GetFavoriteRecipesByUserIdAsync(string userId, int page, int pageSize)
-        {
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.");
-            }
+        //public async Task<(List<Recipe>, long)> GetFavoriteRecipesByUserIdAsync(string userId, int page, int pageSize)
+        //{
+        //    if (string.IsNullOrWhiteSpace(userId))
+        //    {
+        //        throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.");
+        //    }
 
-            if (page <= 0 || pageSize <= 0)
-            {
-                throw new ArgumentException("Параметри пагінації мають бути більше нуля.");
-            }
+        //    if (page <= 0 || pageSize <= 0)
+        //    {
+        //        throw new ArgumentException("Параметри пагінації мають бути більше нуля.");
+        //    }
 
-            try
-            {
-                // Отримуємо користувача
-                var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+        //    try
+        //    {
+        //        // Отримуємо користувача
+        //        var user = await _users.Find(u => u.Id == userId).FirstOrDefaultAsync();
 
-                if (user == null)
-                {
-                    throw new KeyNotFoundException("Користувача не знайдено.");
-                }
+        //        if (user == null)
+        //        {
+        //            throw new KeyNotFoundException("Користувача не знайдено.");
+        //        }
 
-                if (user.FavoriteRecipes == null || !user.FavoriteRecipes.Any())
-                {
-                    return (new List<Recipe>(), 0); // Якщо немає улюблених рецептів
-                }
+        //        if (user.FavoriteRecipes == null || !user.FavoriteRecipes.Any())
+        //        {
+        //            return (new List<Recipe>(), 0); // Якщо немає улюблених рецептів
+        //        }
 
-                // Загальна кількість улюблених рецептів
-                var totalCount = user.FavoriteRecipes.Count;
+        //        // Загальна кількість улюблених рецептів
+        //        var totalCount = user.FavoriteRecipes.Count;
 
-                // Виконуємо пагінацію на стороні серверу
-                var paginatedRecipes = user.FavoriteRecipes
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
+        //        // Виконуємо пагінацію на стороні серверу
+        //        var paginatedRecipes = user.FavoriteRecipes
+        //            .Skip((page - 1) * pageSize)
+        //            .Take(pageSize)
+        //            .ToList();
 
-                return (paginatedRecipes, totalCount);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Помилка під час отримання улюблених рецептів: {ex.Message}");
-            }
-        }
+        //        return (paginatedRecipes, totalCount);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new InvalidOperationException($"Помилка під час отримання улюблених рецептів: {ex.Message}");
+        //    }
+        //}
 
         public async Task<(List<Recipe>, long)> GetRecipesByHolidayAsync(Holiday holiday, int page, int pageSize)
         {

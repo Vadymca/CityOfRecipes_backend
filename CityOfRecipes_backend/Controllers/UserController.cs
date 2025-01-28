@@ -288,5 +288,71 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
+        [Authorize]
+        [HttpPost("toggle-favorite-author")]
+        public async Task<IActionResult> ToggleFavoriteAuthor([FromBody] ToggleFavoriteAuthorRequestDto request)
+        {
+            if (string.IsNullOrWhiteSpace(request.AuthorId))
+                return BadRequest(new { message = "AuthorId не може бути порожнім." });
+
+            try
+            {
+                // Отримуємо ID авторизованого користувача з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized(new { message = "Не вдалося визначити користувача." });
+
+                // Викликаємо метод сервісу
+                var isAdded = await _userService.ToggleFavoriteAuthorAsync(userId, request.AuthorId);
+
+                // Формуємо відповідь
+                var message = isAdded
+                    ? "Автор успішно доданий до улюблених."
+                    : "Автор успішно видалений з улюблених.";
+                return Ok(new { message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpGet("favorite-authors")]
+        public async Task<IActionResult> GetFavoriteAuthors()
+        {
+            try
+            {
+                // Отримуємо ID авторизованого користувача з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { message = "Не вдалося визначити користувача." });
+                }
+
+                // Викликаємо метод сервісу
+                var favoriteAuthors = await _userService.GetFavoriteAuthorsAsync(userId);
+
+                return Ok(new
+                {
+                    message = "Успішно отримано список улюблених авторів.",
+                    authors = favoriteAuthors
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = $"Помилка: {ex.Message}" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = $"Помилка: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Внутрішня помилка сервера. Спробуйте пізніше." });
+            }
+        }
+
+
     }
 }
