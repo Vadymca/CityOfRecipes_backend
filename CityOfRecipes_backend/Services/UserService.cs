@@ -622,8 +622,9 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        public async Task<bool> ToggleFavoriteAuthorAsync(string userId, string authorId)
+        public async Task<bool> ToggleFavoriteAuthorAsync(string userId, string authorId, bool isAdded=true)
         {
+
             if (string.IsNullOrEmpty(userId))
                 throw new ArgumentException("Ідентифікатор користувача не може бути пустим.", nameof(userId));
 
@@ -646,14 +647,17 @@ namespace CityOfRecipes_backend.Services
             }
             else
             {
+                
                 // Додаємо або видаляємо автора
                 if (user.FavoriteAuthors.Contains(authorObjectId))
                 {
                     user.FavoriteAuthors.Remove(authorObjectId); // Видаляємо з улюблених
+                    isAdded = false;
                 }
                 else
                 {
                     user.FavoriteAuthors.Add(authorObjectId); // Додаємо в улюблені
+                    isAdded = true;
                 }
             }
 
@@ -661,7 +665,7 @@ namespace CityOfRecipes_backend.Services
             var updateDefinition = Builders<User>.Update.Set(u => u.FavoriteAuthors, user.FavoriteAuthors);
             var updateResult = await _users.UpdateOneAsync(u => u.Id == userId, updateDefinition);
 
-            return updateResult.ModifiedCount > 0;
+            return isAdded;
         }
 
         public async Task<List<AuthorDto>> GetFavoriteAuthorsAsync(string userId)

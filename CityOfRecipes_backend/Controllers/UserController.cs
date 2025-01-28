@@ -292,15 +292,20 @@ namespace CityOfRecipes_backend.Controllers
         [HttpPost("toggle-favorite-author")]
         public async Task<IActionResult> ToggleFavoriteAuthor([FromBody] ToggleFavoriteAuthorRequestDto request)
         {
-            if (string.IsNullOrWhiteSpace(request.AuthorId))
+            // Перевіряємо, чи запит не порожній
+            if (request == null || string.IsNullOrWhiteSpace(request.AuthorId))
+            {
                 return BadRequest(new { message = "AuthorId не може бути порожнім." });
+            }
 
             try
             {
                 // Отримуємо ID авторизованого користувача з токена
                 var userId = User.FindFirst("id")?.Value;
                 if (string.IsNullOrEmpty(userId))
+                {
                     return Unauthorized(new { message = "Не вдалося визначити користувача." });
+                }
 
                 // Викликаємо метод сервісу
                 var isAdded = await _userService.ToggleFavoriteAuthorAsync(userId, request.AuthorId);
@@ -309,13 +314,24 @@ namespace CityOfRecipes_backend.Controllers
                 var message = isAdded
                     ? "Автор успішно доданий до улюблених."
                     : "Автор успішно видалений з улюблених.";
+
                 return Ok(new { message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = ex.Message });
+                // Загальна помилка сервера
+                return StatusCode(500, new { message = "Сталася помилка: " + ex.Message });
             }
         }
+
 
         [Authorize]
         [HttpGet("favorite-authors")]
