@@ -561,13 +561,9 @@ namespace CityOfRecipes_backend.Services
                     throw new Exception("Не вдалося оновити користувача з новим токеном.");
 
                 // Надсилаємо лист для скидання пароля
-                var resetLink = $"http://localhost:4200/reset-password/:token";
-                await _emailService.SendEmailAsync(
-                    user.Email,
-                    "Скидання пароля",
-                    $"Ваш код для скидання пароля: {token}\n\n" +
-                    $"Скопіюйте цей код і перейдіть за посиланням, щоб скинути ваш пароль: {resetLink}"
-                );
+                var resetLink = $"http://localhost:4200/reset-password?token={token}";
+                await _emailService.SendEmailAsync(user.Email, "Скидання пароля",
+                    $"Перейдіть за посиланням, щоб скинути ваш пароль: {resetLink}");
 
                 return token;
             }
