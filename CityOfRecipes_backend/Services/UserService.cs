@@ -302,7 +302,7 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser)
+        public async Task<UserDto?> UpdateAsync(string userId, UserDto updatedUser, string? newPassword=null)
         {
             try
             {
@@ -332,6 +332,19 @@ namespace CityOfRecipes_backend.Services
 
                 if (!string.IsNullOrEmpty(updatedUser.ProfilePhotoUrl))
                     updates.Add(updateDefinitionBuilder.Set(u => u.ProfilePhotoUrl, updatedUser.ProfilePhotoUrl));
+
+                // Перевірка: чи відповідає пароль вимогам
+                if (!IsValidPassword(updatedUser.Password))
+                    throw new ArgumentException(
+                        "Пароль має бути не менше 6 символів, містити хоча б одну велику букву, одну малу букву та одну цифру.",
+                        nameof(updatedUser.Password));
+
+                newPassword = updatedUser.Password;
+
+                // Генеруємо хеш нового пароля
+                var newHashedPassword = HashPassword(updatedUser.Password);
+
+                updates.Add(updateDefinitionBuilder.Set(u => u.PasswordHash, newHashedPassword));
 
                 // Обробляємо поле City, якщо воно передане
                 if (updatedUser.CityId != null)
@@ -391,6 +404,7 @@ namespace CityOfRecipes_backend.Services
                 {
                     Id = userId,
                     Email = !string.IsNullOrEmpty(updatedUser.Email) ? updatedUser.Email : existingUser.Email,
+                    Password = newPassword,
                     FirstName = !string.IsNullOrEmpty(updatedUser.FirstName) ? updatedUser.FirstName : existingUser.FirstName,
                     LastName = !string.IsNullOrEmpty(updatedUser.LastName) ? updatedUser.LastName : existingUser.LastName,
                     About = !string.IsNullOrEmpty(updatedUser.About) ? updatedUser.About : existingUser.About,
@@ -543,11 +557,12 @@ namespace CityOfRecipes_backend.Services
                     throw new Exception("Не вдалося оновити користувача з новим токеном.");
 
                 // Надсилаємо лист для скидання пароля
+                var resetLink = $"http://localhost:4200/reset-password/:token";
                 await _emailService.SendEmailAsync(
                     user.Email,
                     "Скидання пароля",
                     $"Ваш код для скидання пароля: {token}\n\n" +
-                    "Скопіюйте цей код і введіть його в програмі, щоб скинути ваш пароль."
+                    $"Скопіюйте цей код і перейдіть за посиланням, щоб скинути ваш пароль: {resetLink}"
                 );
 
                 return token;

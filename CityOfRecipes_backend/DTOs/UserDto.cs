@@ -13,7 +13,9 @@ namespace CityOfRecipes_backend.DTOs
         [BsonIgnoreIfNull]
         public string? Email { get; set; } // Email зроблено необов’язковим
 
-       
+        [BsonIgnoreIfNull]
+        public string? Password { get; set; } // Password зроблено необов’язковим
+
         [BsonIgnoreIfNull]
         public string? FirstName { get; set; } // Ім'я може бути null
 
