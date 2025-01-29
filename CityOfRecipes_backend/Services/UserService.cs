@@ -631,6 +631,10 @@ namespace CityOfRecipes_backend.Services
             if (string.IsNullOrEmpty(authorId))
                 throw new ArgumentException("Ідентифікатор автора не може бути пустим.", nameof(authorId));
 
+            // Перевіряємо, чи користувач не намагається додати самого себе
+            if (userId == authorId)
+                throw new InvalidOperationException("Ви не можете додати самого себе до улюблених авторів.");
+
             // Перетворюємо authorId у ObjectId
             if (!ObjectId.TryParse(authorId, out ObjectId authorObjectId))
                 throw new ArgumentException("Невірний формат ідентифікатора автора.", nameof(authorId));
