@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using CityOfRecipes_backend.DTOs;
 using System.Linq;
+using CityOfRecipes_backend.Validation;
 
 namespace CityOfRecipes_backend.Services
 {
@@ -567,6 +568,12 @@ namespace CityOfRecipes_backend.Services
                 // Перевірка валідності рецепта
                 newRecipe.Validate();
 
+                if (!UrlValidator.IsValidUrl(newRecipe.PhotoUrl))
+                    throw new ArgumentException("Некоректне посилання на фото.");
+
+                if (!UrlValidator.IsValidUrl(newRecipe.VideoUrl))
+                    throw new ArgumentException("Некоректне посилання на відео.");
+
                 // Додавання рецепта
                 await _recipes.InsertOneAsync(newRecipe);
             }
@@ -627,12 +634,18 @@ namespace CityOfRecipes_backend.Services
                 {
                     existingRecipe.PreparationTimeMinutes = updatedData.PreparationTimeMinutes;
                 }
+                // 🔹 **Додаємо валідацію URL**
                 if (!string.IsNullOrWhiteSpace(updatedData.PhotoUrl))
                 {
+                    if (!UrlValidator.IsValidUrl(updatedData.PhotoUrl))
+                        throw new ArgumentException("Некоректне посилання на фото.");
                     existingRecipe.PhotoUrl = updatedData.PhotoUrl;
                 }
+
                 if (!string.IsNullOrWhiteSpace(updatedData.VideoUrl))
                 {
+                    if (!UrlValidator.IsValidUrl(updatedData.VideoUrl))
+                        throw new ArgumentException("Некоректне посилання на відео.");
                     existingRecipe.VideoUrl = updatedData.VideoUrl;
                 }
 
