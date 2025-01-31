@@ -1,29 +1,8 @@
 ﻿using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
-using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Server.HttpSys;
-using System.ComponentModel;
 
 namespace CityOfRecipes_backend.Models
 {
-    [Flags]
-    public enum Holiday
-    {
-        [Description("Без свята")]
-        None = 0,
-
-        [Description("Різдво")]
-        Christmas = 1,
-
-        [Description("Новий рік")]
-        NewYear = 2,
-
-        [Description("Дитячий день")]
-        Children = 4,
-
-        [Description("Великдень")]
-        Easter = 8
-    }
     public class Recipe
     {
         [BsonId]
@@ -56,10 +35,6 @@ namespace CityOfRecipes_backend.Models
         [BsonElement("IngredientsList")]
         [BsonIgnoreIfNull]
         public string IngredientsList { get; set; } = string.Empty; // Список інгредієнтів у довільному форматі
-
-        [BsonElement("IngredientsText")]
-        [BsonIgnoreIfNull]
-        public string IngredientsText { get; set; } = string.Empty;
 
         [BsonElement("Ingredients")]
         [BsonIgnoreIfNull]
@@ -100,20 +75,29 @@ namespace CityOfRecipes_backend.Models
         [BsonElement("TextScore")]
         public double? TextScore { get; set; } // Поле для оцінки релевантності
 
+        [BsonIgnoreIfNull]
         public bool IsParticipatedInContest { get; set; } = false; // За замовчуванням - не брав участі
 
         [BsonIgnoreIfNull]
-        public Holiday Holidays { get; set; } = Holiday.None;// Святкові прапори
+        public bool IsChristmas { get; set; } = false;
+
+        [BsonIgnoreIfNull]
+        public bool IsNewYear { get; set; } = false;
+
+        [BsonIgnoreIfNull]
+        public bool IsChildren { get; set; } = false;
+
+        [BsonIgnoreIfNull]
+        public bool IsEaster { get; set; } = false;
+
         public void Validate()
         {
             if (RecipeName.Length > 200)
                 throw new ArgumentException("Ім'я рецепта не повинно перевищувати 200 символів.");
-            if (IngredientsText.Length < 10)
+            if (IngredientsList.Length < 10)
                 throw new ArgumentException("Текст інгрідієнту має містити не менше 10 символів.");
             if (InstructionsText.Length < 10)
                 throw new ArgumentException("Текст інструкції має містити не менше 10 символів.");
-            if (Slug.Length > 255)
-                throw new ArgumentException("Слаг перевищує максимальну довжину в 255 символів.");
         }
     }
 }

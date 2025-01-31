@@ -51,12 +51,13 @@ namespace CityOfRecipes_backend.Models
         [BsonRepresentation(BsonType.ObjectId)]
         [BsonIgnoreIfNull]
         public string? CityId { get; set; } 
+
         [BsonElement("Rating")]
         public double Rating { get; set; } = 0;
 
         [BsonElement("FavoriteRecipes")]
         [BsonIgnoreIfNull]
-        public ICollection<string>? FavoriteRecipes { get; set; }
+        public ICollection<ObjectId>? FavoriteRecipes { get; set; }
 
         [BsonElement("FavoriteAuthors")]
         [BsonIgnoreIfNull]

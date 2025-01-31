@@ -734,10 +734,6 @@ namespace CityOfRecipes_backend.Services
             return authorDtos;
         }
 
-
-
-
-
         private bool IsValidPassword(string password)
         {
             if (string.IsNullOrWhiteSpace(password) || password.Length < 6)

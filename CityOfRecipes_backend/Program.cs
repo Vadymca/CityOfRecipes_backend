@@ -24,6 +24,7 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<CountryService>();
             builder.Services.AddSingleton<AuthService>();
             builder.Services.AddSingleton<TokenService>();
+            builder.Services.AddSingleton<RatingService>();
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

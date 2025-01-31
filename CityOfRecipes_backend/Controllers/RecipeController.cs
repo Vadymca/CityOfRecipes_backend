@@ -1,7 +1,9 @@
-﻿using CityOfRecipes_backend.Models;
+﻿using CityOfRecipes_backend.DTOs;
+using CityOfRecipes_backend.Models;
 using CityOfRecipes_backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CityOfRecipes_backend.Controllers
 {
@@ -10,10 +12,12 @@ namespace CityOfRecipes_backend.Controllers
     public class RecipeController : ControllerBase
     {
         private readonly RecipeService _recipeService;
+        private readonly RatingService _ratingService;
 
-        public RecipeController(RecipeService recipeService)
+        public RecipeController(RecipeService recipeService, RatingService ratingService)
         {
             _recipeService = recipeService;
+            _ratingService = ratingService;
         }
 
         [HttpGet("searchByTag")]
@@ -56,22 +60,30 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet("searchByString")]
-        public async Task<IActionResult> SearchRecipesByString([FromQuery] string searchQuery)
+        public async Task<IActionResult> SearchRecipesByString(
+                            [FromQuery] string query,
+                            [FromQuery] int page = 1,
+                            [FromQuery] int pageSize = 10
+            )
         {
-            if (string.IsNullOrWhiteSpace(searchQuery))
+            if (string.IsNullOrWhiteSpace(query))
             {
                 return BadRequest(new { Message = "Рядок пошуку не може бути порожнім." });
             }
 
             try
             {
-                var recipes = await _recipeService.SearchRecipesByStringAsync(searchQuery);
-                if (recipes == null || !recipes.Any())
-                {
-                    return NotFound(new { Message = "Рецепти не знайдено за заданим запитом." });
-                }
+                var (recipes, totalCount) = await _recipeService.SearchRecipesByStringAsync(query, page, pageSize);
 
-                return Ok(recipes);
+                var response = new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                };
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -79,29 +91,22 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
     
-
         [HttpGet]
-        public async Task<ActionResult<object>> GetAllRecipes([FromQuery] int skip = 0, [FromQuery] int limit = 10)
+        public async Task<ActionResult<object>> GetAllRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
-            if (skip < 0 || limit <= 0)
-            {
-                return BadRequest("Параметри 'skip' і 'limit' мають бути додатними.");
-            }
+                var (recipes, totalCount) = await _recipeService.GetPaginatedRecipesAsync(page, pageSize);
 
-            var (recipes, totalRecipes) = await _recipeService.GetPaginatedRecipesAsync(skip, limit);
+                var response = new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                };
 
-            if (recipes == null || recipes.Count == 0)
-            {
-                return NotFound("Рецептів не знайдено.");
-            }
-
-            return Ok(new
-            {
-                Total = totalRecipes,
-                Recipes = recipes
-            });
+                return Ok(response);
             }
             catch (InvalidOperationException ex)
             {
@@ -143,7 +148,6 @@ namespace CityOfRecipes_backend.Controllers
                     recipe.PhotoUrl,
                     recipe.AverageRating,
                     recipe.TotalRatings,
-                    recipe.Holidays,
                     recipe.Slug,
                     recipe.IsParticipatedInContest // Додано для перевірки участі в конкурсі
                 });
@@ -173,8 +177,15 @@ namespace CityOfRecipes_backend.Controllers
 
             try
             {
-                var recipes = await _recipeService.GetRecipesByAuthorIdAsync(authorId, page, pageSize);
-                return Ok(recipes);
+                var (recipes, total) = await _recipeService.GetRecipesByAuthorIdAsync(authorId, page, pageSize);
+
+                return Ok(new
+                {
+                    TotalCount = total,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                });
             }
             catch (KeyNotFoundException ex)
             {
@@ -189,20 +200,17 @@ namespace CityOfRecipes_backend.Controllers
         [HttpGet("by-category/{categoryId}")]
         public async Task<IActionResult> GetRecipesByCategoryId(string categoryId, int page = 1, int pageSize = 10)
         {
-            if (string.IsNullOrWhiteSpace(categoryId))
-            {
-                return BadRequest(new { Message = "Ідентифікатор категорії не може бути порожнім." });
-            }
-
-            if (page < 1 || pageSize < 1)
-            {
-                return BadRequest(new { Message = "Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0." });
-            }
-
             try
             {
-                var recipes = await _recipeService.GetRecipesByCategoryIdAsync(categoryId, page, pageSize);
-                return Ok(recipes);
+                var (recipes, total) = await _recipeService.GetRecipesByCategoryIdAsync(categoryId, page, pageSize);
+
+                return Ok(new
+                {
+                    TotalCount = total,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                });
             }
             catch (KeyNotFoundException ex)
             {
@@ -214,48 +222,48 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
-        //[HttpGet("favorites")]
-        //[Authorize]
-        //public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
-        //{
-        //    try
-        //    {
-        //        // Отримуємо `userId` з токена
-        //        var userId = User.FindFirst("id")?.Value;
+        [HttpGet("favorite-recipes")]
+        [Authorize]
+        public async Task<IActionResult> GetFavoriteRecipes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                // Отримуємо `userId` з токена
+                var userId = User.FindFirst("id")?.Value;
 
-        //        if (string.IsNullOrEmpty(userId))
-        //        {
-        //            return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
-        //        }
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
+                }
 
-        //        // Виклик сервісу для отримання улюблених рецептів
-        //        var (recipes, totalCount) = await _recipeService.GetFavoriteRecipesByUserIdAsync(userId, page, pageSize);
+                // Виклик сервісу для отримання улюблених рецептів
+                var (recipes, totalCount) = await _recipeService.GetFavoriteRecipesByUserIdAsync(userId, page, pageSize);
 
-        //        // Формування відповіді з пагінацією
-        //        var response = new
-        //        {
-        //            TotalCount = totalCount,
-        //            Page = page,
-        //            PageSize = pageSize,
-        //            Recipes = recipes
-        //        };
+                // Формування відповіді з пагінацією
+                var response = new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                };
 
-        //        return Ok(response);
-        //    }
-        //    catch (ArgumentException ex)
-        //    {
-        //        return BadRequest($"Помилка: {ex.Message}");
-        //    }
-        //    catch (KeyNotFoundException ex)
-        //    {
-        //        return NotFound(new { Message = ex.Message });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return BadRequest(new { Message = ex.Message });
-        //    }
+                return Ok(response);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest($"Помилка: {ex.Message}");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
 
-        //}
+        }
 
         [HttpGet("by-slug/{slug}")]
         public async Task<ActionResult<Recipe>> GetRecipeBySlug(string slug)
@@ -296,7 +304,10 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet("holiday")]
-        public async Task<IActionResult> GetRecipesByHoliday([FromQuery] Holiday holiday, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        public async Task<IActionResult> GetRecipesByHoliday(
+                                        [FromQuery] string holiday, 
+                                        [FromQuery] int page = 1, 
+                                        [FromQuery] int pageSize = 10)
         {
             try
             {
@@ -314,11 +325,15 @@ namespace CityOfRecipes_backend.Controllers
 
                 return Ok(response);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
             {
                 return BadRequest(new { Message = ex.Message });
             }
-        }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = "Внутрішня помилка сервера.", Error = ex.Message });
+            }
+}
 
         [HttpPost]
         [Authorize]
@@ -349,8 +364,7 @@ namespace CityOfRecipes_backend.Controllers
                         newRecipe.Tags,
                         newRecipe.PhotoUrl,
                         newRecipe.AverageRating,
-                        newRecipe.TotalRatings,
-                        newRecipe.Holidays
+                        newRecipe.TotalRatings
                     }
 
                     );
@@ -415,6 +429,68 @@ namespace CityOfRecipes_backend.Controllers
             {
                 return BadRequest(new { Message = ex.Message });
             }
+        }
+
+        [Authorize]
+        [HttpPost("toggle-favorite-recipe")]
+        public async Task<IActionResult> ToggleFavoriteRecipe([FromQuery] string recipeId)
+        {
+            try
+            {
+                // Отримуємо ID авторизованого користувача з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { message = "Не вдалося визначити користувача." });
+                }
+
+                // Викликаємо сервіс для додавання/видалення улюбленого рецепта
+                var isAdded = await _recipeService.ToggleFavoriteRecipeAsync(userId, recipeId);
+
+                return Ok(new
+                {
+                    message = isAdded ? "Рецепт додано до улюблених." : "Рецепт видалено з улюблених."
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = $"Помилка: {ex.Message}" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = $"Помилка: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Внутрішня помилка сервера. Спробуйте пізніше." });
+            }
+        }
+
+        [Authorize] 
+        [HttpPost("rate")]
+        public async Task<IActionResult> RateRecipe([FromBody] RateRecipeRequestDto request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.RecipeId))
+            {
+                return BadRequest("Некоректні дані.");
+            }
+
+            // Отримуємо `userId` з токена
+            var userId = User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized("Користувач не авторизований.");
+            }
+
+            bool success = await _ratingService.AddOrUpdateRatingAsync(request.RecipeId, userId, request.Rating);
+
+            if (success)
+            {
+                return Ok(new { message = "Оцінку додано або оновлено" });
+            }
+
+            return BadRequest("Не вдалося оновити оцінку.");
         }
     }
 }
