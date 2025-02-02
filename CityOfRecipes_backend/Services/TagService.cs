@@ -23,10 +23,10 @@ namespace CityOfRecipes_backend.Services
 
             var tags = rawTags
                 .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries) // Розділення по комі та пробілу
-                .Select(tag => tag.ToLower().Trim())
-                .Where(tag => tag.All(char.IsLetterOrDigit)) // Тільки букви/цифри
-                 .Select(tag => $"#{tag}")                   // Додавання решітки
-                .Distinct()                                 // Унікальність
+                .Select(tag => tag.Trim().ToLower()) // Видаляємо пробіли та переводимо в нижній регістр
+                .Select(tag => tag.StartsWith("#") ? tag : $"#{tag}") // Додаємо решітку, якщо її немає
+                .Where(tag => tag.Length > 1 && tag.Skip(1).All(char.IsLetterOrDigit)) // Переконуємося, що тег містить букви/цифри
+                .Distinct() // Видаляємо дублікати
                 .ToList();
 
             return tags;

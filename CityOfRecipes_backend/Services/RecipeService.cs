@@ -31,16 +31,16 @@ namespace CityOfRecipes_backend.Services
             _categories = database.GetCollection<Category>("Categories");
             _tagService = tagService;
             _ingredientService = ingredientService;
-            CreateIndexesAsync().Wait();
+            //CreateIndexesAsync().Wait();
         }
 
-        private async Task CreateIndexesAsync()
-        {
-            var indexKeys = Builders<Recipe>.IndexKeys.Ascending(recipe => recipe.Slug);
-            var indexOptions = new CreateIndexOptions { Unique = true };
-            var indexModel = new CreateIndexModel<Recipe>(indexKeys, indexOptions);
-            await _recipes.Indexes.CreateOneAsync(indexModel);
-        }
+        //private async Task CreateIndexesAsync()
+        //{
+        //    var indexKeys = Builders<Recipe>.IndexKeys.Ascending(recipe => recipe.Slug);
+        //    var indexOptions = new CreateIndexOptions { Unique = true };
+        //    var indexModel = new CreateIndexModel<Recipe>(indexKeys, indexOptions);
+        //    await _recipes.Indexes.CreateOneAsync(indexModel);
+        //}
 
         public async Task<bool> SlugExistsAsync(string slug)
         {
@@ -62,16 +62,21 @@ namespace CityOfRecipes_backend.Services
             return uniqueSlug;
         }
 
-        public async Task<List<Recipe>> SearchRecipesByTagAsync(string tag)
+        public async Task<(List<RecipeDto>, long)> SearchRecipesByTagAsync(string tag, int page = 1, int pageSize = 10)
         {
             if (string.IsNullOrWhiteSpace(tag))
             {
                 throw new ArgumentException("Тег не може бути порожнім.");
             }
 
+            if (page < 1 || pageSize < 1)
+            {
+                throw new ArgumentException("Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0.");
+            }
+
             try
             {
-                // Уніфікуємо формат тегу (без решітки, у нижньому регістрі)
+                // Уніфікація формату тегу (без решітки, у нижньому регістрі)
                 var normalizedTag = tag.Trim().ToLower();
                 if (normalizedTag.StartsWith("#"))
                 {
@@ -81,21 +86,35 @@ namespace CityOfRecipes_backend.Services
                 // Фільтр: пошук рецептів, які містять заданий тег
                 var filter = Builders<Recipe>.Filter.AnyEq(r => r.Tags, $"#{normalizedTag}");
 
-                // Отримання відповідних рецептів
-                var recipes = await _recipes.Find(filter).ToListAsync();
+                // Отримати загальну кількість рецептів з цим тегом
+                var totalRecipes = await _recipes.CountDocumentsAsync(filter);
 
-                if (!recipes.Any())
+                // Отримати список рецептів з пагінацією і сортуванням від нових до старих
+                var recipes = await _recipes.Find(filter)
+                                            .SortByDescending(r => r.CreatedAt) // Сортуємо від найновіших
+                                            .Skip((page - 1) * pageSize)
+                                            .Limit(pageSize)
+                                            .ToListAsync();
+
+                // Перетворення `Recipe` у `RecipeDto`
+                var recipeDtos = recipes.Select(r => new RecipeDto
                 {
-                    throw new KeyNotFoundException($"Жодного рецепта з тегом '{tag}' не знайдено.");
-                }
+                    Id = r.Id.ToString(),
+                    Slug = r.Slug,
+                    RecipeName = r.RecipeName,
+                    PhotoUrl = r.PhotoUrl,
+                    AuthorId = r.AuthorId.ToString(),
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                }).ToList();
 
-                return recipes;
+                return (recipeDtos, totalRecipes);
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Помилка під час пошуку рецептів за тегом: {ex.Message}");
+                throw new InvalidOperationException($"Помилка під час пошуку рецептів за тегом '{tag}': {ex.Message}");
             }
         }
+
 
         public async Task<(List<RecipeDto>, long)> SearchRecipesByStringAsync(string searchQuery, int page = 1, int pageSize = 10)
         {
@@ -544,44 +563,67 @@ namespace CityOfRecipes_backend.Services
             return isAdded;
         }
 
-        public async Task CreateAsync(Recipe newRecipe)
+        public async Task<string> CreateAsync(CreateRecipeDto dto, string authorId)
         {
             try
             {
-                // Генерація слага
-                newRecipe.Slug = await GenerateSlugAsync(newRecipe.RecipeName);
+                if (string.IsNullOrWhiteSpace(dto.RecipeName))
+                    throw new ArgumentException("Назва рецепта не може бути порожньою.");
+
+                // Генерація унікального slug
+                var slug = await GenerateSlugAsync(dto.RecipeName);
 
                 // Обробка тегів
-                var tags = _tagService.ParseTags(newRecipe.TagsText);
-                newRecipe.Tags = tags;
-
-                // Оновлення глобальних тегів
+                var tags = _tagService.ParseTags(dto.TagsText);
                 await _tagService.UpdateGlobalTagsAsync(tags);
 
                 // Обробка інгредієнтів
-                var ingredients = _ingredientService.ParseIngredients(newRecipe.IngredientsList);
-                newRecipe.Ingredients = ingredients;
-
-                // Оновлення глобального списку інгредієнтів
+                var ingredients = _ingredientService.ParseIngredients(dto.IngredientsList);
                 await _ingredientService.UpdateGlobalIngredientsAsync(ingredients);
 
-                // Перевірка валідності рецепта
+                // Створюємо новий об'єкт рецепта
+                var newRecipe = new Recipe
+                {
+                    AuthorId = authorId,
+                    CategoryId = dto.CategoryId,
+                    RecipeName = dto.RecipeName,
+                    PreparationTimeMinutes = dto.PreparationTimeMinutes,
+                    IngredientsList = dto.IngredientsList,
+                    Ingredients = ingredients,
+                    InstructionsText = dto.InstructionsText,
+                    PhotoUrl = dto.PhotoUrl,
+                    VideoUrl = dto.VideoUrl,
+                    TagsText = dto.TagsText,
+                    Tags = tags,
+                    Slug = slug,
+                    CreatedAt = DateTime.UtcNow,
+                    IsChristmas = dto.IsChristmas,
+                    IsNewYear = dto.IsNewYear,
+                    IsChildren = dto.IsChildren,
+                    IsEaster = dto.IsEaster
+                };
+
+                // Перевірка валідності
                 newRecipe.Validate();
 
+                // Перевірка URL-адрес
                 if (!UrlValidator.IsValidUrl(newRecipe.PhotoUrl))
                     throw new ArgumentException("Некоректне посилання на фото.");
 
                 if (!UrlValidator.IsValidUrl(newRecipe.VideoUrl))
                     throw new ArgumentException("Некоректне посилання на відео.");
 
-                // Додавання рецепта
+                // Додавання рецепта в базу
                 await _recipes.InsertOneAsync(newRecipe);
+
+                return newRecipe.Id; // Повертаємо `Id` створеного рецепта
             }
-            catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+            catch (ArgumentException ex)
             {
-                throw new InvalidOperationException("Slug вже існує. Будь ласка, спробуйте ще раз з іншою назвою");
+                throw new InvalidOperationException($"Помилка при створенні рецепта: {ex.Message}");
             }
         }
+
 
         public async Task UpdateAsync(string recipeId, Recipe updatedData)
         {

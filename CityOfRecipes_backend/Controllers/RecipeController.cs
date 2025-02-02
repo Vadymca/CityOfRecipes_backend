@@ -21,33 +21,32 @@ namespace CityOfRecipes_backend.Controllers
         }
 
         [HttpGet("searchByTag")]
-        public async Task<IActionResult> SearchRecipesByTag([FromQuery] string tag)
+        public async Task<IActionResult> SearchRecipesByTag([FromQuery] string tag, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             if (string.IsNullOrWhiteSpace(tag))
             {
                 return BadRequest(new { Message = "Тег не може бути порожнім." });
             }
 
+            if (page < 1 || pageSize < 1)
+            {
+                return BadRequest(new { Message = "Невірні параметри пагінації. Сторінка та розмір сторінки повинні бути більше 0." });
+            }
+
             try
             {
-                var recipes = await _recipeService.SearchRecipesByTagAsync(tag);
+                // Викликаємо сервісний метод з пагінацією
+                var (recipes, totalRecipes) = await _recipeService.SearchRecipesByTagAsync(tag, page, pageSize);
 
-                // Формуємо список результатів
-                var results = recipes.Select(recipe => new
+                
+
+                return Ok(new
                 {
-                    recipe.Id,
-                    recipe.RecipeName,
-                    recipe.CategoryId,
-                    recipe.AuthorId,
-                    recipe.PreparationTimeMinutes,
-                    recipe.Tags,
-                    recipe.PhotoUrl,
-                    recipe.AverageRating,
-                    recipe.TotalRatings,
-                    recipe.Slug
-                }).ToList();
-
-                return Ok(results);
+                    TotalRecipes = totalRecipes, // Загальна кількість знайдених рецептів
+                    Page = page,
+                    PageSize = pageSize,
+                    Recipes = recipes
+                });
             }
             catch (KeyNotFoundException ex)
             {
@@ -337,41 +336,54 @@ namespace CityOfRecipes_backend.Controllers
 
         [HttpPost]
         [Authorize]
-        public async Task<IActionResult> CreateRecipe([FromBody] Recipe newRecipe)
+        public async Task<IActionResult> CreateRecipe([FromBody] CreateRecipeDto dto)
         {
-            if (newRecipe == null)
+            if (dto == null)
             {
                 return BadRequest(new { Message = "Потрібні дані про рецепт." });
             }
 
             try
             {
-                await _recipeService.CreateAsync(newRecipe);
+                // Отримуємо userId з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { Message = "Не вдалося отримати ідентифікатор користувача." });
+                }
+
+                // Викликаємо сервіс для створення рецепта
+                var recipeId = await _recipeService.CreateAsync(dto, userId);
+
                 return CreatedAtAction(
                     nameof(GetRecipeById),
-                    new { id = newRecipe.Id },
+                    new { id = recipeId },
                     new
                     {
-                        newRecipe.Id,
-                        newRecipe.RecipeName,
-                        newRecipe.CategoryId,
-                        newRecipe.AuthorId,
-                        newRecipe.PreparationTimeMinutes,
-                        newRecipe.CreatedAt,
-                        newRecipe.Ingredients,
-                        newRecipe.IngredientsList,
-                        newRecipe.InstructionsText,
-                        newRecipe.Tags,
-                        newRecipe.PhotoUrl,
-                        newRecipe.AverageRating,
-                        newRecipe.TotalRatings
+                        Id = recipeId,
+                        dto.RecipeName,
+                        dto.CategoryId,
+                        AuthorId = userId,
+                        dto.PreparationTimeMinutes,
+                        CreatedAt = DateTime.UtcNow,
+                        dto.IngredientsList,
+                        dto.InstructionsText,
+                        dto.PhotoUrl,
+                        dto.TagsText,
+                        dto.IsChristmas,
+                        dto.IsNewYear,
+                        dto.IsChildren,
+                        dto.IsEaster
                     }
-
-                    );
+                );
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = ex.Message });
+                return StatusCode(500, new { Message = "Сталася помилка при створенні рецепта.", Error = ex.Message });
             }
         }
 
