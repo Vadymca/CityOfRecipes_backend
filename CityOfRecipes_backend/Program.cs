@@ -22,6 +22,7 @@ namespace CityOfRecipes_backend
             builder.Services.AddSingleton<CityService>();
             builder.Services.AddSingleton<IImageUploadService, ImageUploadService>();
             builder.Services.AddSingleton<CountryService>();
+            builder.Services.AddSingleton<ContestService>();
             builder.Services.AddSingleton<AuthService>();
             builder.Services.AddSingleton<TokenService>();
             builder.Services.AddSingleton<RatingService>();

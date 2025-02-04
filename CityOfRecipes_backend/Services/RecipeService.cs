@@ -135,7 +135,6 @@ namespace CityOfRecipes_backend.Services
                     return Builders<Recipe>.Filter.Or(
                         Builders<Recipe>.Filter.Regex(r => r.RecipeName, regex),
                         Builders<Recipe>.Filter.Regex(r => r.IngredientsList, regex),
-                        Builders<Recipe>.Filter.Regex(r => r.Ingredients, regex),
                         Builders<Recipe>.Filter.Regex(r => r.InstructionsText, regex),
                         Builders<Recipe>.Filter.Regex(r => r.TagsText, regex),
                         Builders<Recipe>.Filter.Regex(r => r.Tags, regex)
@@ -563,7 +562,7 @@ namespace CityOfRecipes_backend.Services
             return isAdded;
         }
 
-        public async Task<string> CreateAsync(CreateRecipeDto dto, string authorId)
+        public async Task<Recipe> CreateAsync(CreateRecipeDto dto, string authorId)
         {
             try
             {
@@ -577,10 +576,6 @@ namespace CityOfRecipes_backend.Services
                 var tags = _tagService.ParseTags(dto.TagsText);
                 await _tagService.UpdateGlobalTagsAsync(tags);
 
-                // Обробка інгредієнтів
-                var ingredients = _ingredientService.ParseIngredients(dto.IngredientsList);
-                await _ingredientService.UpdateGlobalIngredientsAsync(ingredients);
-
                 // Створюємо новий об'єкт рецепта
                 var newRecipe = new Recipe
                 {
@@ -589,7 +584,6 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = dto.RecipeName,
                     PreparationTimeMinutes = dto.PreparationTimeMinutes,
                     IngredientsList = dto.IngredientsList,
-                    Ingredients = ingredients,
                     InstructionsText = dto.InstructionsText,
                     PhotoUrl = dto.PhotoUrl,
                     VideoUrl = dto.VideoUrl,
@@ -616,7 +610,7 @@ namespace CityOfRecipes_backend.Services
                 // Додавання рецепта в базу
                 await _recipes.InsertOneAsync(newRecipe);
 
-                return newRecipe.Id; // Повертаємо `Id` створеного рецепта
+                return newRecipe; // Повертаємо створеного рецепта
             }
             catch (ArgumentException ex)
             {
@@ -624,8 +618,7 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-
-        public async Task UpdateAsync(string recipeId, Recipe updatedData)
+        public async Task<Recipe> UpdateAsync(string recipeId, Recipe updatedData, string userId)
         {
             try
             {
@@ -634,6 +627,12 @@ namespace CityOfRecipes_backend.Services
                 if (existingRecipe == null)
                 {
                     throw new KeyNotFoundException($"Рецепт з ID {recipeId} не знайдено.");
+                }
+
+                // Перевірка на авторство
+                if (existingRecipe.AuthorId != userId)
+                {
+                    throw new UnauthorizedAccessException("Ви не можете редагувати цей рецепт, оскільки ви не є його автором.");
                 }
 
                 // Перевірка на участь у конкурсі
@@ -660,9 +659,7 @@ namespace CityOfRecipes_backend.Services
                 // Оновлення інгредієнтів
                 if (!string.IsNullOrWhiteSpace(updatedData.IngredientsList))
                 {
-                    var ingredients = _ingredientService.ParseIngredients(updatedData.IngredientsList);
-                    existingRecipe.Ingredients = ingredients;
-                    await _ingredientService.UpdateGlobalIngredientsAsync(ingredients);
+                    existingRecipe.IngredientsList = updatedData.IngredientsList;
                 }
 
                 // Оновлення інструкцій
@@ -703,6 +700,7 @@ namespace CityOfRecipes_backend.Services
                 // Оновлення рецепта в базі
                 var filter = Builders<Recipe>.Filter.Eq(r => r.Id, recipeId);
                 await _recipes.ReplaceOneAsync(filter, existingRecipe);
+                return existingRecipe;
             }
             catch (Exception ex)
             {
@@ -710,7 +708,7 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        public async Task DeleteAsync(string recipeId)
+        public async Task DeleteAsync(string recipeId, string userId)
         {
             try
             {
@@ -719,6 +717,12 @@ namespace CityOfRecipes_backend.Services
                 if (existingRecipe == null)
                 {
                     throw new KeyNotFoundException($"Рецепт з ID {recipeId} не знайдено.");
+                }
+
+                // Перевірка на авторство
+                if (existingRecipe.AuthorId != userId)
+                {
+                    throw new UnauthorizedAccessException("Ви не можете видалити цей рецепт, оскільки ви не є його автором.");
                 }
 
                 // Перевірка на участь у конкурсі

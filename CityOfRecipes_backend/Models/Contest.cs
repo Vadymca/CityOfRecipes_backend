@@ -13,6 +13,10 @@ namespace CityOfRecipes_backend.Models
         [BsonRequired]
         public string ContestName { get; set; } = string.Empty;
 
+        [BsonElement("PhotoUrl")]
+        [BsonIgnoreIfNull]
+        public string? PhotoUrl { get; set; }
+
         [BsonElement("StartDate")]
         [BsonRequired]
         public DateTime StartDate { get; set; }
@@ -46,8 +50,7 @@ namespace CityOfRecipes_backend.Models
         {
             if (ContestName.Length > 200)
                 throw new ArgumentException("Назва конкурсу перевищує максимальну довжину в 200 символів.");
-            if (Slug.Length > 100)
-                throw new ArgumentException("Слаг перевищує максимальну довжину в 100 символів.");
+            
         }
 
     }

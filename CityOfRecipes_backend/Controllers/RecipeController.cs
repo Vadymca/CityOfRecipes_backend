@@ -141,7 +141,6 @@ namespace CityOfRecipes_backend.Controllers
                     recipe.AuthorId,
                     recipe.PreparationTimeMinutes,
                     recipe.CreatedAt,
-                    recipe.Ingredients,
                     recipe.InstructionsText,
                     recipe.Tags,
                     recipe.PhotoUrl,
@@ -353,28 +352,12 @@ namespace CityOfRecipes_backend.Controllers
                 }
 
                 // Викликаємо сервіс для створення рецепта
-                var recipeId = await _recipeService.CreateAsync(dto, userId);
+                var recipe = await _recipeService.CreateAsync(dto, userId);
 
                 return CreatedAtAction(
                     nameof(GetRecipeById),
-                    new { id = recipeId },
-                    new
-                    {
-                        Id = recipeId,
-                        dto.RecipeName,
-                        dto.CategoryId,
-                        AuthorId = userId,
-                        dto.PreparationTimeMinutes,
-                        CreatedAt = DateTime.UtcNow,
-                        dto.IngredientsList,
-                        dto.InstructionsText,
-                        dto.PhotoUrl,
-                        dto.TagsText,
-                        dto.IsChristmas,
-                        dto.IsNewYear,
-                        dto.IsChildren,
-                        dto.IsEaster
-                    }
+                    new { id = recipe.Id },
+                    recipe
                 );
             }
             catch (InvalidOperationException ex)
@@ -398,8 +381,18 @@ namespace CityOfRecipes_backend.Controllers
 
             try
             {
-                await _recipeService.UpdateAsync(id, updatedData);
-                return Ok(new { Message = "Рецепт успішно оновлено." });
+                // Отримуємо ID користувача з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
+                }
+                var updatedRecipe = await _recipeService.UpdateAsync(id, updatedData, userId);
+                return Ok(updatedRecipe);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid(); 
             }
             catch (InvalidOperationException ex)
             {
@@ -426,8 +419,18 @@ namespace CityOfRecipes_backend.Controllers
 
             try
             {
-                await _recipeService.DeleteAsync(id);
+                // Отримуємо ID користувача з токена
+                var userId = User.FindFirst("id")?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new { Message = "Не вдалося ідентифікувати користувача." });
+                }
+                await _recipeService.DeleteAsync(id, userId);
                 return Ok(new { Message = "Рецепт успішно видалено." });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
             }
             catch (InvalidOperationException ex)
             {
@@ -484,7 +487,7 @@ namespace CityOfRecipes_backend.Controllers
         {
             if (request == null || string.IsNullOrWhiteSpace(request.RecipeId))
             {
-                return BadRequest("Некоректні дані.");
+                return BadRequest(new { message = "Некоректні дані." });
             }
 
             // Отримуємо `userId` з токена
@@ -492,7 +495,7 @@ namespace CityOfRecipes_backend.Controllers
 
             if (string.IsNullOrWhiteSpace(userId))
             {
-                return Unauthorized("Користувач не авторизований.");
+                return Unauthorized(new { message = "Користувач не авторизований." });
             }
 
             bool success = await _ratingService.AddOrUpdateRatingAsync(request.RecipeId, userId, request.Rating);
@@ -502,7 +505,7 @@ namespace CityOfRecipes_backend.Controllers
                 return Ok(new { message = "Оцінку додано або оновлено" });
             }
 
-            return BadRequest("Не вдалося оновити оцінку.");
+            return BadRequest(new { message = "Не вдалося оновити оцінку." });
         }
     }
 }

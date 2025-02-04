@@ -36,10 +36,6 @@ namespace CityOfRecipes_backend.Models
         [BsonIgnoreIfNull]
         public string IngredientsList { get; set; } = string.Empty; // Список інгредієнтів у довільному форматі
 
-        [BsonElement("Ingredients")]
-        [BsonIgnoreIfNull]
-        public List<string> Ingredients { get; set; } = new(); // Оброблені інгредієнти
-
         [BsonElement("InstructionsText")]
         [BsonIgnoreIfNull]
         public string InstructionsText { get; set; } = string.Empty;
