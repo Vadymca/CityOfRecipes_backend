@@ -31,16 +31,10 @@ namespace CityOfRecipes_backend.Services
             _categories = database.GetCollection<Category>("Categories");
             _tagService = tagService;
             _ingredientService = ingredientService;
-            //CreateIndexesAsync().Wait();
+            
         }
 
-        //private async Task CreateIndexesAsync()
-        //{
-        //    var indexKeys = Builders<Recipe>.IndexKeys.Ascending(recipe => recipe.Slug);
-        //    var indexOptions = new CreateIndexOptions { Unique = true };
-        //    var indexModel = new CreateIndexModel<Recipe>(indexKeys, indexOptions);
-        //    await _recipes.Indexes.CreateOneAsync(indexModel);
-        //}
+        
 
         public async Task<bool> SlugExistsAsync(string slug)
         {
