@@ -38,87 +38,92 @@ namespace CityOfRecipes_backend.Services
             {
                 var pipeline = new[]
                 {
-        // Зв'язок з рецептами
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
-                {
-                    { "from", "Recipes" },
-                    { "localField", "_id" },
-                    { "foreignField", "AuthorId" },
-                    { "as", "Recipes" }
-                }
-            }
-        },
-        // Пропустити і обмежити
-        new BsonDocument
-        {
-            { "$skip", start }
-        },
-        new BsonDocument
-        {
-            { "$limit", limit }
-        },
-        // Зв'язок з містами
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
-                {
-                    { "from", "Cities" },
-                    { "localField", "CityId" },
-                    { "foreignField", "_id" },
-                    { "as", "CityDetails" }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$unwind", new BsonDocument
-                {
-                    { "path", "$CityDetails" },
-                    { "preserveNullAndEmptyArrays", true }
-                }
-            }
-        },
-        // Зв'язок з країнами через місто
-        new BsonDocument
-        {
-            { "$lookup", new BsonDocument
-                {
-                    { "from", "Countries" },
-                    { "localField", "CityDetails.CountryId" },
-                    { "foreignField", "_id" },
-                    { "as", "CountryDetails" }
-                }
-            }
-        },
-        new BsonDocument
-        {
-            { "$unwind", new BsonDocument
-                {
-                    { "path", "$CountryDetails" },
-                    { "preserveNullAndEmptyArrays", true }
-                }
-            }
-        },
-        // Вибір необхідних полів
-        new BsonDocument
-        {
-            { "$project", new BsonDocument
-                {
-                    { "Id", "$_id" },
-                    { "FirstName", 1 },
-                    { "LastName", 1 },
-                    { "ProfilePhotoUrl", 1 },
-                    { "City", "$CityDetails.CityName" },
-                    { "Country", "$CountryDetails.CountryName" },
-                    { "RegistrationDate", 1 },
-                    { "Rating", 1 },
-                    { "About", 1 }
-                }
-            }
-        }
-    };
+                    // Зв'язок з рецептами
+                    new BsonDocument
+                    {
+                        { "$lookup", new BsonDocument
+                            {
+                                { "from", "Recipes" },
+                                { "localField", "_id" },
+                                { "foreignField", "AuthorId" },
+                                { "as", "Recipes" }
+                            }
+                        }
+                    },
+                    // 🔥 Додаємо сортування за рейтингом
+                    new BsonDocument
+                    {
+                        { "$sort", new BsonDocument { { "Rating", -1 } } } // Сортуємо від найбільшого до найменшого
+                    },
+                    // Пропустити і обмежити (пагінація)
+                    new BsonDocument
+                    {
+                        { "$skip", start }
+                    },
+                    new BsonDocument
+                    {
+                        { "$limit", limit }
+                    },
+                    // Зв'язок з містами
+                    new BsonDocument
+                    {
+                        { "$lookup", new BsonDocument
+                            {
+                                { "from", "Cities" },
+                                { "localField", "CityId" },
+                                { "foreignField", "_id" },
+                                { "as", "CityDetails" }
+                            }
+                        }
+                    },
+                    new BsonDocument
+                    {
+                        { "$unwind", new BsonDocument
+                            {
+                                { "path", "$CityDetails" },
+                                { "preserveNullAndEmptyArrays", true }
+                            }
+                        }
+                    },
+                    // Зв'язок з країнами через місто
+                    new BsonDocument
+                    {
+                        { "$lookup", new BsonDocument
+                            {
+                                { "from", "Countries" },
+                                { "localField", "CityDetails.CountryId" },
+                                { "foreignField", "_id" },
+                                { "as", "CountryDetails" }
+                            }
+                        }
+                    },
+                    new BsonDocument
+                    {
+                        { "$unwind", new BsonDocument
+                            {
+                                { "path", "$CountryDetails" },
+                                { "preserveNullAndEmptyArrays", true }
+                            }
+                        }
+                    },
+                    // Вибір необхідних полів
+                    new BsonDocument
+                    {
+                        { "$project", new BsonDocument
+                            {
+                                { "Id", "$_id" },
+                                { "FirstName", 1 },
+                                { "LastName", 1 },
+                                { "ProfilePhotoUrl", 1 },
+                                { "City", "$CityDetails.CityName" },
+                                { "Country", "$CountryDetails.CountryName" },
+                                { "RegistrationDate", 1 },
+                                { "Rating", 1 },
+                                { "About", 1 }
+                            }
+                        }
+                    }
+                };
 
                 var results = await _users.Aggregate<BsonDocument>(pipeline).ToListAsync();
 
@@ -291,9 +296,6 @@ namespace CityOfRecipes_backend.Services
             try
             {
             var authors = await GetAsync(start, limit);
-
-            // Сортування за рейтингом
-            authors = authors.OrderByDescending(a => a.Rating).ToList();
 
             return authors;
             }

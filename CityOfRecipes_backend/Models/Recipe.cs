@@ -56,6 +56,10 @@ namespace CityOfRecipes_backend.Models
         [BsonIgnoreIfNull]
         public int TotalRatings { get; set; } = 0; // Загальна кількість оцінок
 
+        [BsonElement("ContestRating")]
+        [BsonIgnoreIfNull]
+        public int ContestRating { get; set; } = 0; // Конкурсний рейтинг
+
         [BsonElement("Slug")]
         [BsonIgnoreIfNull]
         public string Slug { get; set; } = string.Empty;

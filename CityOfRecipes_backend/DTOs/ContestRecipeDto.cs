@@ -1,11 +1,6 @@
-﻿using MongoDB.Bson.Serialization.Attributes;
-using MongoDB.Bson;
-using System.ComponentModel.DataAnnotations;
-
-namespace CityOfRecipes_backend.DTOs
+﻿namespace CityOfRecipes_backend.DTOs
 {
-
-    public class RecipeDto
+    public class ContestRecipeDto
     {
         public string Id { get; set; } = string.Empty;
         public string Slug { get; set; } = string.Empty;
@@ -14,6 +9,6 @@ namespace CityOfRecipes_backend.DTOs
         public string AuthorId { get; set; } = string.Empty;
         public string CategoryId { get; set; } = string.Empty;
         public double AverageRating { get; set; } = 0.0;
-
+        public int ContestRating { get; set; } = 0;
     }
 }

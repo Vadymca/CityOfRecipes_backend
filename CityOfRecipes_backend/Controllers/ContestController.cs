@@ -79,6 +79,39 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
+        // Отримати конкурс за слагом
+        [HttpGet("by-slug/{slug}")]
+        public async Task<IActionResult> GetContestBySlug(string slug)
+        {
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                return BadRequest(new { Message = "Slug не може бути порожнім." });
+            }
+
+            try
+            {
+                var contest = await _contestService.GetContestBySlugAsync(slug);
+                if (contest == null)
+                {
+                    return NotFound(new { Message = $"Конкурс зі slug '{slug}' не знайдено." });
+                }
+
+                return Ok(contest);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = $"Внутрішня помилка сервера: {ex.Message}" });
+            }
+        }
+
         // Отримати список конкурсів, у яких бере участь рецепт
         [HttpGet("by-recipe/{recipeId}")]
         public async Task<IActionResult> GetContestsByRecipeId(string recipeId)
@@ -125,28 +158,6 @@ namespace CityOfRecipes_backend.Controllers
             }
         }
 
-        // Отримати список рецептів у конкурсі
-        [HttpGet("{contestId}/recipes")]
-        public async Task<IActionResult> GetRecipesByContestId(string contestId)
-        {
-            try
-            {
-                var recipes = await _contestService.GetRecipesByContestIdAsync(contestId);
-                return Ok(recipes);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { Message = ex.Message });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { Message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = $"Помилка отримання рецептів для конкурсу: {ex.Message}" });
-            }
-        }
 
         // Додати рецепт до конкурсу (авторизований користувач)
         [HttpPost("{contestId}/add-recipe/{recipeId}")]
@@ -189,7 +200,7 @@ namespace CityOfRecipes_backend.Controllers
 
         // Створити конкурс
         [HttpPost("create")]
-        [Authorize] 
+        [Authorize]
         public async Task<IActionResult> CreateContest([FromBody] Contest newContest)
         {
             try
@@ -197,8 +208,18 @@ namespace CityOfRecipes_backend.Controllers
                 if (newContest == null)
                     return BadRequest(new { Message = "Дані конкурсу не можуть бути порожніми." });
 
-                var createdContest = await _contestService.CreateContestAsync(newContest);
+                // Отримуємо userId з токена
+                var userId = User.Claims.FirstOrDefault(c => c.Type == "id")?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                    return Unauthorized(new { Message = "Користувач не авторизований." });
+
+                // Передаємо userId в CreateContestAsync
+                var createdContest = await _contestService.CreateContestAsync(newContest, userId);
                 return CreatedAtAction(nameof(GetContestById), new { contestId = createdContest.Id }, createdContest);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(); // 403, якщо користувач не адміністратор
             }
             catch (ArgumentException ex)
             {
@@ -212,7 +233,7 @@ namespace CityOfRecipes_backend.Controllers
             {
                 return StatusCode(500, new { Message = $"Внутрішня помилка сервера: {ex.Message}" });
             }
-        }
 
+        }
     }
 }

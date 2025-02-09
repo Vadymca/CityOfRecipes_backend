@@ -28,24 +28,25 @@ namespace CityOfRecipes_backend.Models
         [BsonElement("RequiredIngredients")]
         public string? RequiredIngredients { get; set; }
 
+        [BsonElement("ContestDetails")]
+        public string? ContestDetails { get; set; }
+
         [BsonElement("CategoryId")]
         [BsonRepresentation(BsonType.ObjectId)]
         public string? CategoryId { get; set; }
 
-        [BsonElement("InitialLikes")]
-        public int InitialLikes { get; set; } = 0;
 
         [BsonElement("ContestRecipes")]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public List<string> ContestRecipes { get; set; } = new();
+        public List<Recipe> ContestRecipes { get; set; } = new();
 
-        [BsonElement("WinningRecipeId")]
-        [BsonRepresentation(BsonType.ObjectId)]
-        public string? WinningRecipeId { get; set; }
+        [BsonElement("WinningRecipes")]
+        public List<Recipe> WinningRecipes { get; set; } = new();
 
         [BsonElement("Slug")]
         [BsonRequired]
         public string Slug { get; set; } = string.Empty;
+
+        public bool IsClosed { get; set; } = false;
         public void Validate()
         {
             if (ContestName.Length > 200)

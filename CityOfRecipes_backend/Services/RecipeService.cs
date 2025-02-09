@@ -98,7 +98,8 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = r.RecipeName,
                     PhotoUrl = r.PhotoUrl,
                     AuthorId = r.AuthorId.ToString(),
-                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty,
+                    AverageRating = r.AverageRating
                 }).ToList();
 
                 return (recipeDtos, totalRecipes);
@@ -108,7 +109,6 @@ namespace CityOfRecipes_backend.Services
                 throw new InvalidOperationException($"Помилка під час пошуку рецептів за тегом '{tag}': {ex.Message}");
             }
         }
-
 
         public async Task<(List<RecipeDto>, long)> SearchRecipesByStringAsync(string searchQuery, int page = 1, int pageSize = 10)
         {
@@ -184,7 +184,8 @@ namespace CityOfRecipes_backend.Services
                         RecipeName = r.RecipeName,
                         PhotoUrl = r.PhotoUrl,
                         AuthorId = r.AuthorId.ToString(),
-                        CategoryId = r.CategoryId.ToString()
+                        CategoryId = r.CategoryId.ToString(),
+                        AverageRating = r.AverageRating
                     };
                 }).ToList();
 
@@ -238,7 +239,8 @@ namespace CityOfRecipes_backend.Services
                         RecipeName = r.RecipeName,
                         PhotoUrl = r.PhotoUrl,
                         AuthorId = r.AuthorId.ToString(),
-                        CategoryId = r.CategoryId.ToString()
+                        CategoryId = r.CategoryId.ToString(),
+                        AverageRating = r.AverageRating
                     };
                 }).ToList();
 
@@ -345,7 +347,8 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = r.RecipeName,
                     PhotoUrl = r.PhotoUrl,
                     AuthorId = r.AuthorId.ToString(),
-                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty,
+                    AverageRating = r.AverageRating
                 }).ToList();
 
                 return (recipeDtos, totalRecipes);
@@ -391,7 +394,8 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = r.RecipeName,
                     PhotoUrl = r.PhotoUrl,
                     AuthorId = r.AuthorId.ToString(),
-                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty,
+                    AverageRating = r.AverageRating
                 }).ToList();
 
                 return (recipeDtos, totalRecipes);
@@ -453,7 +457,8 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = r.RecipeName,
                     PhotoUrl = r.PhotoUrl,
                     AuthorId = r.AuthorId.ToString(),
-                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty,
+                    AverageRating = r.AverageRating
                 }).ToList();
 
                 return (recipeDtos, totalCount);
@@ -501,7 +506,8 @@ namespace CityOfRecipes_backend.Services
                     RecipeName = r.RecipeName,
                     PhotoUrl = r.PhotoUrl,
                     AuthorId = r.AuthorId.ToString(),
-                    CategoryId = r.CategoryId?.ToString() ?? string.Empty
+                    CategoryId = r.CategoryId?.ToString() ?? string.Empty,
+                    AverageRating = r.AverageRating
                 }).ToList();
 
                 return (recipeDtos, totalCount);

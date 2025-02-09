@@ -52,6 +52,10 @@ namespace CityOfRecipes_backend
                     emailSettings["FromEmail"]
                 );
             });
+
+            // Реєстрація Background Service
+            builder.Services.AddHostedService<ContestResultScheduler>();
+
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
