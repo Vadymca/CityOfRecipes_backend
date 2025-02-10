@@ -120,43 +120,70 @@ namespace CityOfRecipes_backend.Services
             try
             {
                 var words = searchQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                List<Recipe> allMatches = new List<Recipe>();
 
-                // Фільтр для точного збігу назви
-                var exactMatchFilter = Builders<Recipe>.Filter.Eq(r => r.RecipeName, searchQuery);
+                // 1. Пошук за всіма назвами рецептів (не точний, а всі, що містять запит)
+                var nameFilter = Builders<Recipe>.Filter.Regex(r => r.RecipeName, new BsonRegularExpression($".*{Regex.Escape(searchQuery)}.*", "i"));
+                var nameMatches = await _recipes.Find(nameFilter).ToListAsync();
 
-                // Фільтр для часткового збігу (як у вашому коді)
-                var regexFilters = words.Select(word =>
+                if (nameMatches.Any())
                 {
-                    var regex = new BsonRegularExpression($".*{Regex.Escape(word)}.*", "i");
-                    return Builders<Recipe>.Filter.Or(
-                        Builders<Recipe>.Filter.Regex(r => r.RecipeName, regex),
-                        Builders<Recipe>.Filter.Regex(r => r.IngredientsList, regex),
-                        Builders<Recipe>.Filter.Regex(r => r.InstructionsText, regex),
-                        Builders<Recipe>.Filter.Regex(r => r.TagsText, regex),
-                        Builders<Recipe>.Filter.Regex(r => r.Tags, regex)
-                    );
-                }).ToList();
+                    allMatches.AddRange(nameMatches);
+                }
 
-                var partialMatchFilter = Builders<Recipe>.Filter.Or(regexFilters);
+                // 2. Якщо немає результатів по назві, шукаємо за інгредієнтами
+                if (!nameMatches.Any())
+                {
+                    var ingredientFilter = Builders<Recipe>.Filter.Regex(r => r.IngredientsList, new BsonRegularExpression($".*{Regex.Escape(searchQuery)}.*", "i"));
+                    var ingredientMatches = await _recipes.Find(ingredientFilter).ToListAsync();
 
-                // Спочатку шукаємо точні збіги, потім часткові
-                var exactMatches = await _recipes.Find(exactMatchFilter).ToListAsync();
-                var partialMatches = await _recipes.Find(partialMatchFilter).ToListAsync();
+                    if (ingredientMatches.Any())
+                    {
+                        allMatches.AddRange(ingredientMatches);
+                    }
+                }
 
-                // Видаляємо дублікати
-                var recipes = exactMatches.Concat(partialMatches)
-                    .DistinctBy(r => r.Id)
-                    .ToList();
+                // 3. Якщо нічого не знайдено — робимо повнотекстовий пошук
+                if (!allMatches.Any())
+                {
+                    var regexFilters = words.Select(word =>
+                    {
+                        var regex = new BsonRegularExpression($".*{Regex.Escape(word)}.*", "i");
+                        return Builders<Recipe>.Filter.Or(
+                            Builders<Recipe>.Filter.Regex(r => r.RecipeName, regex),
+                            Builders<Recipe>.Filter.Regex(r => r.IngredientsList, regex),
+                            Builders<Recipe>.Filter.Regex(r => r.InstructionsText, regex),
+                            Builders<Recipe>.Filter.Regex(r => r.TagsText, regex),
+                            Builders<Recipe>.Filter.Regex(r => r.Tags, regex)
+                        );
+                    }).ToList();
 
-                long totalCount = recipes.Count;
+                    var fullTextFilter = Builders<Recipe>.Filter.Or(regexFilters);
+                    var fullTextMatches = await _recipes.Find(fullTextFilter).ToListAsync();
 
-                // Пагінація
-                var paginatedRecipes = recipes
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
+                    allMatches.AddRange(fullTextMatches);
+                }
 
-                var recipeDtos = paginatedRecipes.Select(r => new RecipeDto
+                // Унікальні результати (без дублікатів)
+                var uniqueRecipes = allMatches.DistinctBy(r => r.Id).ToList();
+
+                return PaginateAndMap(uniqueRecipes, page, pageSize);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Помилка під час пошуку: {ex.Message}");
+            }
+        }
+
+        // Функція для пагінації та мапінгу результатів
+        private (List<RecipeDto>, long) PaginateAndMap(List<Recipe> recipes, int page, int pageSize)
+        {
+            long totalCount = recipes.Count;
+
+            var paginatedRecipes = recipes
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(r => new RecipeDto
                 {
                     Id = r.Id.ToString(),
                     Slug = r.Slug,
@@ -167,13 +194,9 @@ namespace CityOfRecipes_backend.Services
                     AverageRating = r.AverageRating
                 }).ToList();
 
-                return (recipeDtos, totalCount);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Помилка під час пошуку: {ex.Message}");
-            }
+            return (paginatedRecipes, totalCount);
         }
+
 
 
         public async Task<List<Recipe>> GetAllAsync() =>
