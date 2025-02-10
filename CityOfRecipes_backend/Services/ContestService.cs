@@ -701,8 +701,16 @@ namespace CityOfRecipes_backend.Services
             // Відбираємо кандидатські рецепти, у яких середній рейтинг >= 4
             var candidateRecipes = contest.ContestRecipes.Where(r => r.AverageRating >= 4).ToList();
 
-            // Сортуємо кандидатів за спаданням конкурсного рейтингу та обираємо топ-N переможців
-            var topRecipes = candidateRecipes.OrderByDescending(r => r.ContestRating).Take(topCount).ToList();
+            // Сортуємо кандидатів:
+            // 1. За спаданням ContestRating
+            // 2. Якщо однаковий – за спаданням AverageRating
+            // 3. Якщо і ці значення однакові – за зростанням дати додавання (CreatedAt)
+            var topRecipes = candidateRecipes
+                .OrderByDescending(r => r.ContestRating)
+                .ThenByDescending(r => r.AverageRating)
+                .ThenBy(r => r.CreatedAt)  
+                .Take(topCount)
+                .ToList();
 
             // Зберігаємо переможців у полі WinningRecipes
             contest.WinningRecipes = topRecipes;
