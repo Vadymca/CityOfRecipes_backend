@@ -24,7 +24,6 @@ namespace CityOfRecipes_backend.Services
             _emailService = emailService;
         }
 
-        // Отримати список поточних конкурсів
         public async Task<List<ContestDto>> GetActiveContestsAsync()
         {
             try
@@ -38,7 +37,7 @@ namespace CityOfRecipes_backend.Services
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
 
-                // Для активних конкурсів (IsClosed == false) обчислюємо конкурсний рейтинг для кожного рецепта "на льоту"
+                // Для активних конкурсів (IsClosed == false) обчислюємо конкурсний рейтинг та середню оцінку для кожного рецепта "на льоту"
                 foreach (var contest in contests)
                 {
                     if (!contest.IsClosed)
@@ -49,10 +48,13 @@ namespace CityOfRecipes_backend.Services
                             var filter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipe.Id);
                             var ratingsList = await _ratings.Find(filter).ToListAsync();
 
-                            // Обчислюємо рейтинг: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
+                            // Обчислюємо конкурсний рейтинг: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
                             int count4 = ratingsList.Count(r => r.Likes == 4);
                             int count5 = ratingsList.Count(r => r.Likes == 5);
                             recipe.ContestRating = count4 * 1 + count5 * 2;
+
+                            // Обчислюємо середню оцінку (AverageRating) як середнє значення Likes, або 0 якщо оцінок немає
+                            recipe.AverageRating = ratingsList.Any() ? ratingsList.Average(r => r.Likes) : 0;
                         }
                     }
                 }
@@ -89,6 +91,7 @@ namespace CityOfRecipes_backend.Services
                 throw new InvalidOperationException($"Помилка отримання активних конкурсів: {ex.Message}");
             }
         }
+
 
         public async Task<List<ContestDto>> GetFinishedContestsAsync()
         {
