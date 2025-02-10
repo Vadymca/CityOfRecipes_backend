@@ -37,7 +37,7 @@ namespace CityOfRecipes_backend.Services
                 {
                     // Якщо оцінка вже існує, оновлюємо її
                     existingRating.Likes = ratingValue;
-                    existingRating.DateTime = DateTime.UtcNow;
+                    existingRating.DateTime = DateTime.Now;
                     await _ratings.ReplaceOneAsync(filter, existingRating);
                 }
                 else
@@ -48,7 +48,7 @@ namespace CityOfRecipes_backend.Services
                         RecipeId = recipeId,
                         UserId = userId,
                         Likes = ratingValue,
-                        DateTime = DateTime.UtcNow
+                        DateTime = DateTime.Now
                     };
 
                     await _ratings.InsertOneAsync(newRating);
@@ -59,21 +59,6 @@ namespace CityOfRecipes_backend.Services
 
                 // Перерахунок рейтингу автора рецепта
                 await RecalculateUserRating(recipeId);
-
-                // Додатково: якщо рецепт бере участь у конкурсі, то перераховуємо конкурсний рейтинг
-                var recipe = await _recipes.Find(r => r.Id == recipeId).FirstOrDefaultAsync();
-                if (recipe != null && recipe.IsParticipatedInContest)
-                {
-                    // Знаходимо конкурс, у якому цей рецепт бере участь і який ще відкритий
-                    var contestFilter = Builders<Contest>.Filter.Where(
-                        c => c.IsClosed == false && c.ContestRecipes.Any(cr => cr.Id == recipeId));
-                    var contest = await _contests.Find(contestFilter).FirstOrDefaultAsync();
-
-                    if (contest != null)
-                    {
-                        await RecalculateContestRating(recipeId);
-                    }
-                }
 
                 return true;
             }
@@ -132,81 +117,7 @@ namespace CityOfRecipes_backend.Services
                 var updateUser = Builders<User>.Update.Set(u => u.Rating, newAverage);
                 await _users.UpdateOneAsync(Builders<User>.Filter.Eq(u => u.Id, authorId), updateUser);
             }
-        }
-
-        private async Task RecalculateContestRating(string recipeId)
-        {
-            // Отримуємо всі оцінки для цього рецепта
-            var filter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipeId);
-            var ratings = await _ratings.Find(filter).ToListAsync();
-
-            // Обчислюємо конкурсний рейтинг: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
-            int newContestRating = ratings.Count(r => r.Likes == 4) * 1 + ratings.Count(r => r.Likes == 5) * 2;
-
-            // Оновлюємо сам рецепт
-            var update = Builders<Recipe>.Update.Set(r => r.ContestRating, newContestRating);
-            await _recipes.UpdateOneAsync(Builders<Recipe>.Filter.Eq(r => r.Id, recipeId), update);
-
-            // Оновлюємо вкладений рецепт у конкурсі (якщо рецепт може бути тільки в одному конкурсі, можна використовувати UpdateOne)
-            // Якщо рецепт може бути у декількох конкурсах, використовуйте UpdateMany
-            await UpdateContestRecipeInAllContestsAsync(recipeId, newContestRating);
-        }
-
-        private async Task UpdateContestRecipeInAllContestsAsync(string recipeId, int newContestRating)
-        {
-            try
-            {
-                var objectId = ObjectId.Parse(recipeId);
-
-                // Знайти всі конкурси, які містять рецепт у ContestRecipes
-                var contestFilter = Builders<Contest>.Filter.Where(c =>
-                    c.ContestRecipes.Any(r => r.Id == recipeId || r.Id == objectId.ToString()));
-
-                var contests = await _contests.Find(contestFilter).ToListAsync();
-
-                if (contests.Count == 0)
-                {
-                    Console.WriteLine("Жоден конкурс не містить цей рецепт.");
-                    return;
-                }
-
-                // Отримуємо середній рейтинг рецепта
-                var recipe = await _recipes.Find(r => r.Id == recipeId).FirstOrDefaultAsync();
-                if (recipe == null)
-                {
-                    Console.WriteLine("Рецепт не знайдено.");
-                    return;
-                }
-
-                double newAverageRating = recipe.AverageRating;
-
-                foreach (var contest in contests)
-                {
-                    bool updated = false;
-                    foreach (var contestRecipe in contest.ContestRecipes)
-                    {
-                        if (contestRecipe.Id == recipeId || contestRecipe.Id == objectId.ToString())
-                        {
-                            contestRecipe.ContestRating = newContestRating;
-                            contestRecipe.AverageRating = newAverageRating;
-                            updated = true;
-                        }
-                    }
-
-                    if (updated)
-                    {
-                        var update = Builders<Contest>.Update.Set(c => c.ContestRecipes, contest.ContestRecipes);
-                        await _contests.UpdateOneAsync(Builders<Contest>.Filter.Eq(c => c.Id, contest.Id), update);
-                        Console.WriteLine($"Оновлено рейтинг рецепта у конкурсі {contest.Id}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Помилка під час оновлення конкурсного рейтингу: {ex.Message}");
-            }
-        }
-
+        }  
 
     }
 }

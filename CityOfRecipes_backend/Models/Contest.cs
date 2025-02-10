@@ -47,6 +47,10 @@ namespace CityOfRecipes_backend.Models
         public string Slug { get; set; } = string.Empty;
 
         public bool IsClosed { get; set; } = false;
+
+        // Допоміжний масив для збереження зафіксованих конкурсних рейтингів
+        [BsonElement("FinalContestRatings")]
+        public List<FinalContestRating> FinalContestRatings { get; set; } = new();
         public void Validate()
         {
             if (ContestName.Length > 200)

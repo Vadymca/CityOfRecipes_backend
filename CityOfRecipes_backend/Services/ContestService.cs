@@ -29,7 +29,7 @@ namespace CityOfRecipes_backend.Services
         {
             try
             {
-                var now = DateTime.UtcNow;
+                var now = DateTime.Now;
                 var contests = await _contests
                     .Find(c => c.StartDate <= now && c.EndDate >= now)
                     .ToListAsync();
@@ -37,6 +37,25 @@ namespace CityOfRecipes_backend.Services
                 // Якщо відповідних конкурсів немає, повертаємо порожній список
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
+
+                // Для активних конкурсів (IsClosed == false) обчислюємо конкурсний рейтинг для кожного рецепта "на льоту"
+                foreach (var contest in contests)
+                {
+                    if (!contest.IsClosed)
+                    {
+                        foreach (var recipe in contest.ContestRecipes)
+                        {
+                            // Отримуємо всі оцінки для даного рецепта
+                            var filter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipe.Id);
+                            var ratingsList = await _ratings.Find(filter).ToListAsync();
+
+                            // Обчислюємо рейтинг: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
+                            int count4 = ratingsList.Count(r => r.Likes == 4);
+                            int count5 = ratingsList.Count(r => r.Likes == 5);
+                            recipe.ContestRating = count4 * 1 + count5 * 2;
+                        }
+                    }
+                }
 
                 // Маппінг з моделі Contest до ContestDto
                 var contestDtos = contests.Select(c => new ContestDto
@@ -71,7 +90,6 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        // Отримати список завершених конкурсів
         public async Task<List<ContestDto>> GetFinishedContestsAsync()
         {
             try
@@ -83,40 +101,71 @@ namespace CityOfRecipes_backend.Services
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
 
-                // Маппінг з моделі Contest до ContestDto
-                var contestDtos = contests.Select(c => new ContestDto
+                // Маппінг з моделі Contest до ContestDto із заміною значень ContestRating з FinalContestRatings
+                var contestDtos = contests.Select(c =>
                 {
-                    Id = c.Id,
-                    ContestName = c.ContestName,
-                    PhotoUrl = c.PhotoUrl,
-                    StartDate = c.StartDate,
-                    EndDate = c.EndDate,
-                    RequiredIngredients = c.RequiredIngredients,
-                    ContestDetails = c.ContestDetails,
-                    CategoryId = c.CategoryId,
-                    Slug = c.Slug,
-                    ContestRecipes = c.ContestRecipes.Select(r => new ContestRecipeDto
+                    // Маппінг для списку рецептів конкурсу
+                    var contestRecipeDtos = c.ContestRecipes.Select(r =>
                     {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList(),
-                    WinningRecipes = c.WinningRecipes.Select(r => new ContestRecipeDto
+                        int finalRating = r.ContestRating; // Поточне значення за замовчуванням
+                        if (c.FinalContestRatings != null && c.FinalContestRatings.Any())
+                        {
+                            var fixedRating = c.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                            if (fixedRating != null)
+                                finalRating = fixedRating.ContestRating;
+                        }
+
+                        return new ContestRecipeDto
+                        {
+                            Id = r.Id,
+                            Slug = r.Slug,
+                            RecipeName = r.RecipeName,
+                            PhotoUrl = r.PhotoUrl,
+                            AuthorId = r.AuthorId,
+                            CategoryId = r.CategoryId,
+                            AverageRating = r.AverageRating,
+                            ContestRating = finalRating
+                        };
+                    }).ToList();
+
+                    // Маппінг для переможців (якщо є)
+                    var winningRecipeDtos = c.WinningRecipes.Select(r =>
                     {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList()
+                        int finalRating = r.ContestRating;
+                        if (c.FinalContestRatings != null && c.FinalContestRatings.Any())
+                        {
+                            var fixedRating = c.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                            if (fixedRating != null)
+                                finalRating = fixedRating.ContestRating;
+                        }
+
+                        return new ContestRecipeDto
+                        {
+                            Id = r.Id,
+                            Slug = r.Slug,
+                            RecipeName = r.RecipeName,
+                            PhotoUrl = r.PhotoUrl,
+                            AuthorId = r.AuthorId,
+                            CategoryId = r.CategoryId,
+                            AverageRating = r.AverageRating,
+                            ContestRating = finalRating
+                        };
+                    }).ToList();
+
+                    return new ContestDto
+                    {
+                        Id = c.Id,
+                        ContestName = c.ContestName,
+                        PhotoUrl = c.PhotoUrl,
+                        StartDate = c.StartDate,
+                        EndDate = c.EndDate,
+                        RequiredIngredients = c.RequiredIngredients,
+                        ContestDetails = c.ContestDetails,
+                        CategoryId = c.CategoryId,
+                        Slug = c.Slug,
+                        ContestRecipes = contestRecipeDtos,
+                        WinningRecipes = winningRecipeDtos
+                    };
                 }).ToList();
 
                 return contestDtos;
@@ -127,7 +176,6 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        // Отримати конкретний конкурс за ID
         public async Task<ContestDto?> GetContestByIdAsync(string contestId)
         {
             try
@@ -139,7 +187,55 @@ namespace CityOfRecipes_backend.Services
                 if (contest == null)
                     throw new KeyNotFoundException($"Конкурс з ID {contestId} не знайдено.");
 
-                // Ручний мапінг з Contest до ContestDto
+                // Маппінг для ContestRecipes з підставленням зафіксованих рейтингів, якщо конкурс закритий
+                var contestRecipeDtos = contest.ContestRecipes.Select(r =>
+                {
+                    int finalRating = r.ContestRating; // Поточне значення за замовчуванням
+                    if (contest.IsClosed && contest.FinalContestRatings != null && contest.FinalContestRatings.Any())
+                    {
+                        var fixedRating = contest.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                        if (fixedRating != null)
+                            finalRating = fixedRating.ContestRating;
+                    }
+
+                    return new ContestRecipeDto
+                    {
+                        Id = r.Id,
+                        Slug = r.Slug,
+                        RecipeName = r.RecipeName,
+                        PhotoUrl = r.PhotoUrl,
+                        AuthorId = r.AuthorId,
+                        CategoryId = r.CategoryId,
+                        AverageRating = r.AverageRating,
+                        ContestRating = finalRating
+                    };
+                }).ToList();
+
+                // Маппінг для WinningRecipes з підставленням зафіксованих рейтингів, якщо конкурс закритий
+                var winningRecipeDtos = contest.WinningRecipes.Select(r =>
+                {
+                    int finalRating = r.ContestRating;
+                    if (contest.IsClosed && contest.FinalContestRatings != null && contest.FinalContestRatings.Any())
+                    {
+                        var fixedRating = contest.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                        if (fixedRating != null)
+                            finalRating = fixedRating.ContestRating;
+                    }
+
+                    return new ContestRecipeDto
+                    {
+                        Id = r.Id,
+                        Slug = r.Slug,
+                        RecipeName = r.RecipeName,
+                        PhotoUrl = r.PhotoUrl,
+                        AuthorId = r.AuthorId,
+                        CategoryId = r.CategoryId,
+                        AverageRating = r.AverageRating,
+                        ContestRating = finalRating
+                    };
+                }).ToList();
+
+                // Формуємо DTO для конкурсу
                 var contestDto = new ContestDto
                 {
                     Id = contest.Id,
@@ -151,28 +247,8 @@ namespace CityOfRecipes_backend.Services
                     ContestDetails = contest.ContestDetails,
                     CategoryId = contest.CategoryId,
                     Slug = contest.Slug,
-                    ContestRecipes = contest.ContestRecipes.Select(r => new ContestRecipeDto
-                    {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList(),
-                    WinningRecipes = contest.WinningRecipes.Select(r => new ContestRecipeDto
-                    {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList()
+                    ContestRecipes = contestRecipeDtos,
+                    WinningRecipes = winningRecipeDtos
                 };
 
                 return contestDto;
@@ -183,6 +259,7 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
+
         // Отримати конкретний конкурс за Слагом
         public async Task<ContestDto?> GetContestBySlugAsync(string slug)
         {
@@ -192,7 +269,57 @@ namespace CityOfRecipes_backend.Services
             try
             {
                 var contest = await _contests.Find(c => c.Slug == slug).FirstOrDefaultAsync();
-                // Ручний мапінг з Contest до ContestDto
+                if (contest == null)
+                    throw new KeyNotFoundException($"Конкурс з slug '{slug}' не знайдено.");
+
+                // Маппінг для списку рецептів учасників з підстановкою зафіксованих рейтингів,
+                // якщо конкурс закритий
+                var contestRecipeDtos = contest.ContestRecipes.Select(r =>
+                {
+                    int finalRating = r.ContestRating; // за замовчуванням беремо поточне значення
+                    if (contest.IsClosed && contest.FinalContestRatings != null && contest.FinalContestRatings.Any())
+                    {
+                        var fixedRating = contest.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                        if (fixedRating != null)
+                            finalRating = fixedRating.ContestRating;
+                    }
+                    return new ContestRecipeDto
+                    {
+                        Id = r.Id,
+                        Slug = r.Slug,
+                        RecipeName = r.RecipeName,
+                        PhotoUrl = r.PhotoUrl,
+                        AuthorId = r.AuthorId,
+                        CategoryId = r.CategoryId,
+                        AverageRating = r.AverageRating,
+                        ContestRating = finalRating
+                    };
+                }).ToList();
+
+                // Маппінг для переможців з підстановкою зафіксованих рейтингів
+                var winningRecipeDtos = contest.WinningRecipes.Select(r =>
+                {
+                    int finalRating = r.ContestRating;
+                    if (contest.IsClosed && contest.FinalContestRatings != null && contest.FinalContestRatings.Any())
+                    {
+                        var fixedRating = contest.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                        if (fixedRating != null)
+                            finalRating = fixedRating.ContestRating;
+                    }
+                    return new ContestRecipeDto
+                    {
+                        Id = r.Id,
+                        Slug = r.Slug,
+                        RecipeName = r.RecipeName,
+                        PhotoUrl = r.PhotoUrl,
+                        AuthorId = r.AuthorId,
+                        CategoryId = r.CategoryId,
+                        AverageRating = r.AverageRating,
+                        ContestRating = finalRating
+                    };
+                }).ToList();
+
+                // Формування DTO конкурсу
                 var contestDto = new ContestDto
                 {
                     Id = contest.Id,
@@ -204,28 +331,8 @@ namespace CityOfRecipes_backend.Services
                     ContestDetails = contest.ContestDetails,
                     CategoryId = contest.CategoryId,
                     Slug = contest.Slug,
-                    ContestRecipes = contest.ContestRecipes.Select(r => new ContestRecipeDto
-                    {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList(),
-                    WinningRecipes = contest.WinningRecipes.Select(r => new ContestRecipeDto
-                    {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList()
+                    ContestRecipes = contestRecipeDtos,
+                    WinningRecipes = winningRecipeDtos
                 };
 
                 return contestDto;
@@ -252,29 +359,69 @@ namespace CityOfRecipes_backend.Services
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
 
-                // Маппінг з моделі Contest до ContestDto
-                var contestDtos = contests.Select(c => new ContestDto
+                var contestDtos = contests.Select(c =>
                 {
-                    Id = c.Id,
-                    ContestName = c.ContestName,
-                    PhotoUrl = c.PhotoUrl,
-                    StartDate = c.StartDate,
-                    EndDate = c.EndDate,
-                    RequiredIngredients = c.RequiredIngredients,
-                    ContestDetails = c.ContestDetails,
-                    CategoryId = c.CategoryId,
-                    Slug = c.Slug,
-                    ContestRecipes = c.ContestRecipes.Select(r => new ContestRecipeDto
+                    // Маппінг для рецептів, що беруть участь у конкурсі
+                    var contestRecipeDtos = c.ContestRecipes.Select(r =>
                     {
-                        Id = r.Id,
-                        Slug = r.Slug,
-                        RecipeName = r.RecipeName,
-                        PhotoUrl = r.PhotoUrl,
-                        AuthorId = r.AuthorId,
-                        CategoryId = r.CategoryId,
-                        AverageRating = r.AverageRating,
-                        ContestRating = r.ContestRating
-                    }).ToList()
+                        int finalRating = r.ContestRating; // за замовчуванням поточне значення
+                        if (c.IsClosed && c.FinalContestRatings != null && c.FinalContestRatings.Any())
+                        {
+                            var fixedRating = c.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                            if (fixedRating != null)
+                                finalRating = fixedRating.ContestRating;
+                        }
+
+                        return new ContestRecipeDto
+                        {
+                            Id = r.Id,
+                            Slug = r.Slug,
+                            RecipeName = r.RecipeName,
+                            PhotoUrl = r.PhotoUrl,
+                            AuthorId = r.AuthorId,
+                            CategoryId = r.CategoryId,
+                            AverageRating = r.AverageRating,
+                            ContestRating = finalRating
+                        };
+                    }).ToList();
+
+                    // Маппінг для переможців, якщо такі є
+                    var winningRecipeDtos = c.WinningRecipes.Select(r =>
+                    {
+                        int finalRating = r.ContestRating;
+                        if (c.IsClosed && c.FinalContestRatings != null && c.FinalContestRatings.Any())
+                        {
+                            var fixedRating = c.FinalContestRatings.FirstOrDefault(fr => fr.RecipeId == r.Id);
+                            if (fixedRating != null)
+                                finalRating = fixedRating.ContestRating;
+                        }
+                        return new ContestRecipeDto
+                        {
+                            Id = r.Id,
+                            Slug = r.Slug,
+                            RecipeName = r.RecipeName,
+                            PhotoUrl = r.PhotoUrl,
+                            AuthorId = r.AuthorId,
+                            CategoryId = r.CategoryId,
+                            AverageRating = r.AverageRating,
+                            ContestRating = finalRating
+                        };
+                    }).ToList();
+
+                    return new ContestDto
+                    {
+                        Id = c.Id,
+                        ContestName = c.ContestName,
+                        PhotoUrl = c.PhotoUrl,
+                        StartDate = c.StartDate,
+                        EndDate = c.EndDate,
+                        RequiredIngredients = c.RequiredIngredients,
+                        ContestDetails = c.ContestDetails,
+                        CategoryId = c.CategoryId,
+                        Slug = c.Slug,
+                        ContestRecipes = contestRecipeDtos,
+                        WinningRecipes = winningRecipeDtos
+                    };
                 }).ToList();
 
                 return contestDtos;
@@ -285,7 +432,6 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        // Отримати список конкурсів, у яких рецепт може взяти участь
         public async Task<List<ContestDto>> GetAvailableContestsForRecipeAsync(string recipeId)
         {
             try
@@ -297,10 +443,11 @@ namespace CityOfRecipes_backend.Services
                 if (recipe == null)
                     throw new KeyNotFoundException("Рецепт не знайдено.");
 
-                var now = DateTime.UtcNow;
+                var now = DateTime.Now;
                 var contests = await _contests.Find(c =>
                     c.StartDate <= now && c.EndDate >= now &&
-                    (string.IsNullOrEmpty(c.CategoryId) || c.CategoryId == recipe.CategoryId)
+                    (string.IsNullOrEmpty(c.CategoryId) || c.CategoryId == recipe.CategoryId) &&
+                    !c.ContestRecipes.Any(r => r.Id == recipeId) // Перевіряємо, що рецепт ще не бере участь
                 ).ToListAsync();
 
                 if (contests == null || contests.Count == 0)
@@ -319,8 +466,8 @@ namespace CityOfRecipes_backend.Services
                             .ToList();
 
                         var recipeIngredients = recipe.IngredientsList
-                            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(word => word.Trim().ToLower())
+                            .Split(new[] { ',', ';', '—' }, StringSplitOptions.RemoveEmptyEntries) // Додаємо '—' як роздільник
+                            .Select(word => word.Trim().ToLower().Split(' ')[0]) // Беремо тільки перше слово (щоб "імбир - 1шт" стало "імбир")
                             .ToList();
 
                         // Перевіряємо, чи кожне слово з requiredIngredients міститься хоча б в одному з recipeIngredients
@@ -362,6 +509,7 @@ namespace CityOfRecipes_backend.Services
                 throw new InvalidOperationException($"Помилка отримання доступних конкурсів для рецепта: {ex.Message}");
             }
         }
+
 
 
         // Додати рецепт до конкурсу
@@ -503,97 +651,108 @@ namespace CityOfRecipes_backend.Services
 
         public async Task<List<Recipe>> DetermineContestWinnersAsync(string contestId, int topCount = 3)
         {
-            // **Крок 1.** Отримуємо дані конкурсу за ID
+            // Крок 1. Отримуємо дані конкурсу за ID
             var contest = await _contests.Find(c => c.Id == contestId).FirstOrDefaultAsync();
             if (contest == null)
                 throw new KeyNotFoundException("Конкурс не знайдено.");
 
-            // Якщо в конкурсі немає учасників – повертаємо порожній список
             if (contest.ContestRecipes == null || contest.ContestRecipes.Count == 0)
                 return new List<Recipe>();
 
-            // **Крок 2.** Якщо конкурс ще не закритий, виконуємо обчислення та заморожуємо рейтинги
-            if (!contest.IsClosed)
+            // Якщо конкурс уже закритий – використовуємо збережені результати
+            if (contest.IsClosed)
             {
-                // Позначаємо конкурс як завершений
-                contest.IsClosed = true;
-                var updateContestStatus = Builders<Contest>.Update.Set(c => c.IsClosed, true);
-                await _contests.UpdateOneAsync(c => c.Id == contestId, updateContestStatus);
+                // Замінюємо в кожному рецепті значення конкурсного рейтингу на зафіксоване з масиву FinalContestRatings
+                foreach (var recipe in contest.ContestRecipes)
+                {
+                    var finalRating = contest.FinalContestRatings.FirstOrDefault(f => f.RecipeId == recipe.Id);
+                    if (finalRating != null)
+                        recipe.ContestRating = finalRating.ContestRating;
+                }
+                return contest.WinningRecipes ?? new List<Recipe>();
             }
-            // Якщо конкурс вже закритий, далі обчислення не виконуються, і ми використовуємо вже встановлені значення
 
-            // **Крок 3.** Обчислюємо конкурсні бали для кожного рецепта, але лише якщо рейтинг ще не встановлено (тобто дорівнює 0)
-            var candidateRecipes = new List<Recipe>();
+            // Крок 2. Конкурс ще активний – позначаємо його як завершений
+            contest.IsClosed = true;
+            var updateContestStatus = Builders<Contest>.Update.Set(c => c.IsClosed, true);
+
+            // Крок 3. Обчислюємо конкурсні бали для кожного рецепта (якщо ще не встановлено)
             foreach (var recipe in contest.ContestRecipes)
             {
-                // Якщо значення ContestRating ще не встановлено (0), обчислюємо його
                 if (recipe.ContestRating == 0)
                 {
-                    // Отримуємо всі рейтинги для даного рецепта
                     var filter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipe.Id);
                     var ratingsList = await _ratings.Find(filter).ToListAsync();
 
-                    // Обчислюємо конкурсний бал: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
                     int count4 = ratingsList.Count(r => r.Likes == 4);
                     int count5 = ratingsList.Count(r => r.Likes == 5);
-                    int contestRating = count4 * 1 + count5 * 2;
-
-                    // Записуємо обчислений бал у поле ContestRating
-                    recipe.ContestRating = contestRating;
-
-                    // **За бажанням:** Якщо рецепти зберігаються окремо в базі даних, можна виконати оновлення документу:
-                    // var updateRecipe = Builders<Recipe>.Update.Set(r => r.ContestRating, contestRating);
-                    // await _recipes.UpdateOneAsync(r => r.Id == recipe.Id, updateRecipe);
-                }
-
-                // Додаємо рецепт до кандидатів, якщо його середній рейтинг на момент закриття конкурсу не нижчий за 4
-                if (recipe.AverageRating >= 4)
-                {
-                    candidateRecipes.Add(recipe);
+                    recipe.ContestRating = count4 * 1 + count5 * 2;
                 }
             }
 
-            // **Крок 4.** Сортуємо кандидатів за спаданням конкурсного рейтингу та обираємо топ-N рецептів
-            var winningRecipes = candidateRecipes.OrderByDescending(r => r.ContestRating).ToList();
-            var topRecipes = winningRecipes.Take(topCount).ToList();
+            // Крок 4. Формуємо знімок конкурсних рейтингів – заповнюємо масив FinalContestRatings
+            contest.FinalContestRatings = contest.ContestRecipes
+                .Select(r => new FinalContestRating { RecipeId = r.Id, ContestRating = r.ContestRating })
+                .ToList();
 
-            // Оновлюємо поле WinningRecipes у конкурсі (зберігається повний список учасників у ContestRecipes)
+            // Відбираємо кандидатські рецепти, у яких середній рейтинг >= 4
+            var candidateRecipes = contest.ContestRecipes.Where(r => r.AverageRating >= 4).ToList();
+
+            // Сортуємо кандидатів за спаданням конкурсного рейтингу та обираємо топ-N переможців
+            var topRecipes = candidateRecipes.OrderByDescending(r => r.ContestRating).Take(topCount).ToList();
+
+            // Зберігаємо переможців у полі WinningRecipes
             contest.WinningRecipes = topRecipes;
-            var updateWinning = Builders<Contest>.Update.Set(c => c.WinningRecipes, contest.WinningRecipes);
-            await _contests.UpdateOneAsync(c => c.Id == contestId, updateWinning);
+            var updateWinning = Builders<Contest>.Update
+                .Set(c => c.WinningRecipes, contest.WinningRecipes)
+                .Set(c => c.FinalContestRatings, contest.FinalContestRatings);
 
-            // **Крок 5.** Відправляємо повідомлення учасникам конкурсу
-            // Отримуємо унікальні ID авторів-учасників
-            var participantAuthorIds = contest.ContestRecipes
-                .Select(r => r.AuthorId)
-                .Distinct()
-                .ToList();
-            var winningAuthorIds = contest.WinningRecipes
-                .Select(r => r.AuthorId)
-                .ToList();
+            // Оновлюємо статус та результати конкурсу в базі даних
+            await _contests.UpdateOneAsync(c => c.Id == contestId, Builders<Contest>.Update.Combine(updateContestStatus, updateWinning));
+
+            // Крок 5. Відправляємо повідомлення учасникам  
+            var participantAuthorIds = contest.ContestRecipes.Select(r => r.AuthorId).Distinct().ToList();
+            var winningAuthorIds = contest.WinningRecipes.Select(r => r.AuthorId).ToList();
+
+            string contestUrl = $"http://localhost:4200/contests/{contest.Slug}";
+            string subject = $"Конкурс \"{contest.ContestName}\" завершено";
 
             foreach (var authorId in participantAuthorIds)
             {
-                // Отримуємо дані користувача за його ID
                 var user = await _users.Find(u => u.Id == authorId).FirstOrDefaultAsync();
                 if (user == null || string.IsNullOrWhiteSpace(user.Email))
-                    continue; // Пропускаємо, якщо немає даних чи email
+                    continue;
 
-                string subject = "Конкурс завершено: перегляньте результати";
-                string body = "Шановний учаснику, конкурс завершено. Будь ласка, перегляньте результати конкурсу.";
+                string body;
 
-                // Якщо користувач є автором рецепта-переможця, додаємо привітальне повідомлення
-                if (winningAuthorIds.Contains(authorId))
+                if (winningAuthorIds.Count == 0)
                 {
-                    body = "Вітаємо! Ваш рецепт переміг у конкурсі!";
+                    // Жоден рецепт не переміг
+                    body = $"Конкурс \"{contest.ContestName}\" завершився.\n\n" +
+                           "Переможців визначено не було, оскільки жоден рецепт не виконав необхідну умову.";
+                }
+                else if (winningAuthorIds.Contains(authorId))
+                {
+                    // Користувач є переможцем
+                    var winningRecipe = contest.WinningRecipes.FirstOrDefault(r => r.AuthorId == authorId);
+                    string recipeName = winningRecipe != null ? winningRecipe.RecipeName : "Ваш рецепт";
+
+                    body = $"Вітаємо! 🎉\n\nВаш рецепт \"{recipeName}\" потрапив до числа переможців у конкурсі \"{contest.ContestName}\"!\n" +
+                           $"Всі деталі на сторінці конкурсу: {contestUrl}";
+                }
+                else
+                {
+                    // Конкурс має переможців, але цей користувач не серед них
+                    body = $"Конкурс \"{contest.ContestName}\" завершився.\n\n" +
+                           $"Було визначено переможців конкурсу. Ви можете переглянути результати тут: {contestUrl}";
                 }
 
-                // Відправляємо повідомлення (метод SendEmailAsync повинен бути реалізований у IEmailService)
                 await _emailService.SendEmailAsync(user.Email, subject, body);
             }
 
             return topRecipes;
         }
+
 
     }
 }

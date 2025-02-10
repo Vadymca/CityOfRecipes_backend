@@ -45,27 +45,34 @@ namespace CityOfRecipes_backend.Services
             }
         }
 
-        // Отримання всіх тегів
-        public async Task<List<Models.Tag>> GetAllTagsAsync() =>
-            await _tags.Find(_ => true).ToListAsync();
-
-        // Отримання отримання найбільш популярних тегів
-        public async Task<List<Models.Tag>> GetTopTagsAsync(int limit = 50)
+        //  Отримання всіх тегів (тільки ті, що мають рецепти)
+        public async Task<List<Models.Tag>> GetAllTagsAsync()
         {
-            var sort = Builders<Models.Tag>.Sort.Descending(t => t.UsageCount); // Сортування за UsageCount у порядку спадання
-            return await _tags.Find(_ => true).Sort(sort).Limit(limit).ToListAsync();
+            return await _tags.Find(t => t.UsageCount > 0).ToListAsync();
         }
 
-        // Отримання топових тегів
+        //  Отримання найбільш популярних тегів (тільки ті, що мають рецепти)
+        public async Task<List<Models.Tag>> GetTopTagsAsync(int limit = 50)
+        {
+            var sort = Builders<Models.Tag>.Sort.Descending(t => t.UsageCount);
+            return await _tags.Find(t => t.UsageCount > 0) // Виключаємо теги без рецептів
+                              .Sort(sort)
+                              .Limit(limit)
+                              .ToListAsync();
+        }
+
+        //  Отримання топових імен тегів (тільки ті, що мають рецепти)
         public async Task<List<string>> GetTopTagNamesAsync(int limit = 50)
         {
-            var sort = Builders<Models.Tag>.Sort.Descending(t => t.UsageCount); // Сортування за частотою використання
-            var projection = Builders<Models.Tag>.Projection.Include(t => t.TagName); // Вибираємо лише TagName
-            var tags = await _tags.Find(_ => true)
+            var sort = Builders<Models.Tag>.Sort.Descending(t => t.UsageCount);
+            var projection = Builders<Models.Tag>.Projection.Include(t => t.TagName);
+
+            var tags = await _tags.Find(t => t.UsageCount > 0) // Виключаємо теги без рецептів
                                   .Sort(sort)
                                   .Limit(limit)
                                   .Project<Models.Tag>(projection)
                                   .ToListAsync();
+
             return tags.Select(t => t.TagName).ToList(); // Повертаємо лише імена тегів
         }
 
