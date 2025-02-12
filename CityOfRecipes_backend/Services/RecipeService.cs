@@ -643,10 +643,9 @@ namespace CityOfRecipes_backend.Services
                     throw new InvalidOperationException("Цей рецепт брав участь у конкурсі та не може бути оновлений.");
                 }
 
-                // Генерація слага, якщо назва змінена
+                // Зміна назви
                 if (!string.IsNullOrWhiteSpace(updatedData.RecipeName) && updatedData.RecipeName != existingRecipe.RecipeName)
                 {
-                    existingRecipe.Slug = await GenerateSlugAsync(updatedData.RecipeName);
                     existingRecipe.RecipeName = updatedData.RecipeName;
                 }
 
@@ -675,6 +674,13 @@ namespace CityOfRecipes_backend.Services
                 {
                     existingRecipe.PreparationTimeMinutes = updatedData.PreparationTimeMinutes;
                 }
+
+                // Оновлення категорії, якщо передано новий CategoryId
+                if (!string.IsNullOrWhiteSpace(updatedData.CategoryId) && updatedData.CategoryId != existingRecipe.CategoryId)
+                {
+                    existingRecipe.CategoryId = updatedData.CategoryId;
+                }
+
                 // 🔹 **Додаємо валідацію URL**
                 if (!string.IsNullOrWhiteSpace(updatedData.PhotoUrl))
                 {

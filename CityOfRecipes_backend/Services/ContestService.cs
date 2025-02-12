@@ -97,7 +97,7 @@ namespace CityOfRecipes_backend.Services
         {
             try
             {
-                var now = DateTime.UtcNow;
+                var now = DateTime.Now;
                 var contests = await _contests.Find(c => c.EndDate < now).ToListAsync();
 
                 // Якщо відповідних конкурсів немає, повертаємо порожній список
@@ -464,12 +464,12 @@ namespace CityOfRecipes_backend.Services
                     if (!string.IsNullOrWhiteSpace(contest.RequiredIngredients))
                     {
                         var requiredIngredients = contest.RequiredIngredients
-                            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Split(new[] {',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(word => word.Trim().ToLower())
                             .ToList();
 
                         var recipeIngredients = recipe.IngredientsList
-                            .Split(new[] { ',', ';', '—' }, StringSplitOptions.RemoveEmptyEntries) // Додаємо '—' як роздільник
+                            .Split(new[] { ',', ';', '—','.' }, StringSplitOptions.RemoveEmptyEntries) // Додаємо '—' як роздільник
                             .Select(word => word.Trim().ToLower().Split(' ')[0]) // Беремо тільки перше слово (щоб "імбир - 1шт" стало "імбир")
                             .ToList();
 
@@ -550,12 +550,12 @@ namespace CityOfRecipes_backend.Services
                 {
                     // Розбиваємо рядки за комами або крапкою з комою
                     var requiredIngredients = contest.RequiredIngredients
-                        .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(new[] { ',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(word => word.Trim().ToLower())
                         .ToList();
 
                     var recipeIngredients = recipe.IngredientsList
-                        .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(new[] { ',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(word => word.Trim().ToLower())
                         .ToList();
 
