@@ -60,6 +60,9 @@ namespace CityOfRecipes_backend.Services
                 // Перерахунок рейтингу автора рецепта
                 await RecalculateUserRating(recipeId);
 
+                // Оновлюємо дані в ContestRecipes для відкритих конкурсів, де бере участь цей рецепт
+                await UpdateContestRecipeDataAsync(recipeId);
+
                 return true;
             }
             catch (Exception ex)
@@ -117,7 +120,47 @@ namespace CityOfRecipes_backend.Services
                 var updateUser = Builders<User>.Update.Set(u => u.Rating, newAverage);
                 await _users.UpdateOneAsync(Builders<User>.Filter.Eq(u => u.Id, authorId), updateUser);
             }
-        }  
+        }
+
+        private async Task UpdateContestRecipeDataAsync(string recipeId)
+        {
+            // Фільтр для пошуку відкритих конкурсів, де рецепт є в масиві ContestRecipes
+            var contestsFilter = Builders<Contest>.Filter.And(
+                Builders<Contest>.Filter.Eq(c => c.IsClosed, false),
+                Builders<Contest>.Filter.ElemMatch(c => c.ContestRecipes, r => r.Id == recipeId)
+            );
+
+            var contests = await _contests.Find(contestsFilter).ToListAsync();
+            if (contests == null || !contests.Any())
+                return;
+
+            // Отримуємо всі оцінки для цього рецепта
+            var ratingsFilter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipeId);
+            var ratingsList = await _ratings.Find(ratingsFilter).ToListAsync();
+
+            // Обчислюємо значення конкурсного рейтингу: оцінка 4 дає 1 бал, оцінка 5 – 2 бали
+            int count4 = ratingsList.Count(r => r.Likes == 4);
+            int count5 = ratingsList.Count(r => r.Likes == 5);
+            int contestRating = count4 * 1 + count5 * 2;
+
+            // Обчислюємо середню оцінку для рецепта
+            double averageRating = ratingsList.Any() ? ratingsList.Average(r => r.Likes) : 0;
+
+            // Для кожного знайденого конкурсу оновлюємо значення для даного рецепта в масиві ContestRecipes
+            foreach (var contest in contests)
+            {
+                var contestFilter = Builders<Contest>.Filter.And(
+                    Builders<Contest>.Filter.Eq(c => c.Id, contest.Id),
+                    Builders<Contest>.Filter.ElemMatch(c => c.ContestRecipes, r => r.Id == recipeId)
+                );
+
+                var update = Builders<Contest>.Update
+                    .Set("ContestRecipes.$.ContestRating", contestRating)
+                    .Set("ContestRecipes.$.AverageRating", averageRating);
+
+                await _contests.UpdateOneAsync(contestFilter, update);
+            }
+        }
 
     }
 }

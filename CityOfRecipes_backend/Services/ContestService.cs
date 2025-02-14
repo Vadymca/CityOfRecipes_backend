@@ -3,6 +3,7 @@ using CityOfRecipes_backend.Helpers;
 using MongoDB.Driver;
 using CityOfRecipes_backend.Validation;
 using CityOfRecipes_backend.DTOs;
+using System.Text.RegularExpressions;
 
 namespace CityOfRecipes_backend.Services
 {
@@ -29,37 +30,21 @@ namespace CityOfRecipes_backend.Services
             try
             {
                 var now = DateTime.Now;
+                // Отримуємо лише активні (не закриті) конкурси, де поточна дата знаходиться між StartDate та EndDate
                 var contests = await _contests
-                    .Find(c => c.StartDate <= now && c.EndDate >= now)
+                    .Find(c => c.StartDate <= now && c.EndDate >= now && c.IsClosed == false)
                     .ToListAsync();
 
-                // Якщо відповідних конкурсів немає, повертаємо порожній список
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
 
-                // Для активних конкурсів (IsClosed == false) обчислюємо конкурсний рейтинг та середню оцінку для кожного рецепта "на льоту"
+                // Якщо потрібно — перевертаємо список рецептів, щоб останні додані були першими
                 foreach (var contest in contests)
                 {
-                    if (!contest.IsClosed)
-                    {
-                        foreach (var recipe in contest.ContestRecipes)
-                        {
-                            // Отримуємо всі оцінки для даного рецепта
-                            var filter = Builders<Rating>.Filter.Eq(r => r.RecipeId, recipe.Id);
-                            var ratingsList = await _ratings.Find(filter).ToListAsync();
-
-                            // Обчислюємо конкурсний рейтинг: оцінка 4 дає 1 бал, оцінка 5 дає 2 бали
-                            int count4 = ratingsList.Count(r => r.Likes == 4);
-                            int count5 = ratingsList.Count(r => r.Likes == 5);
-                            recipe.ContestRating = count4 * 1 + count5 * 2;
-
-                            // Обчислюємо середню оцінку (AverageRating) як середнє значення Likes, або 0 якщо оцінок немає
-                            recipe.AverageRating = ratingsList.Any() ? ratingsList.Average(r => r.Likes) : 0;
-                        }
-                    }
+                    contest.ContestRecipes.Reverse();
                 }
 
-                // Маппінг з моделі Contest до ContestDto
+                // Маппінг з моделі Contest до DTO
                 var contestDtos = contests.Select(c => new ContestDto
                 {
                     Id = c.Id,
@@ -190,6 +175,11 @@ namespace CityOfRecipes_backend.Services
                 if (contest == null)
                     throw new KeyNotFoundException($"Конкурс з ID {contestId} не знайдено.");
 
+                if (!contest.IsClosed && contest.ContestRecipes != null && contest.ContestRecipes.Any())
+                {
+                    contest.ContestRecipes.Reverse();
+                }
+
                 // Маппінг для ContestRecipes з підставленням зафіксованих рейтингів, якщо конкурс закритий
                 var contestRecipeDtos = contest.ContestRecipes.Select(r =>
                 {
@@ -200,6 +190,7 @@ namespace CityOfRecipes_backend.Services
                         if (fixedRating != null)
                             finalRating = fixedRating.ContestRating;
                     }
+
 
                     return new ContestRecipeDto
                     {
@@ -274,6 +265,11 @@ namespace CityOfRecipes_backend.Services
                 var contest = await _contests.Find(c => c.Slug == slug).FirstOrDefaultAsync();
                 if (contest == null)
                     throw new KeyNotFoundException($"Конкурс з slug '{slug}' не знайдено.");
+
+                if (!contest.IsClosed && contest.ContestRecipes != null && contest.ContestRecipes.Any())
+                {
+                    contest.ContestRecipes.Reverse();
+                }
 
                 // Маппінг для списку рецептів учасників з підстановкою зафіксованих рейтингів,
                 // якщо конкурс закритий
@@ -449,38 +445,15 @@ namespace CityOfRecipes_backend.Services
                 var now = DateTime.Now;
                 var contests = await _contests.Find(c =>
                     c.StartDate <= now && c.EndDate >= now &&
-                    (string.IsNullOrEmpty(c.CategoryId) || c.CategoryId == recipe.CategoryId) &&
                     !c.ContestRecipes.Any(r => r.Id == recipeId) // Перевіряємо, що рецепт ще не бере участь
                 ).ToListAsync();
 
                 if (contests == null || contests.Count == 0)
                     return new List<ContestDto>();
 
-                var availableContests = new List<ContestDto>();
-
-                foreach (var contest in contests)
-                {
-                    // Перевірка обов’язкових інгредієнтів, якщо вони задані
-                    if (!string.IsNullOrWhiteSpace(contest.RequiredIngredients))
-                    {
-                        var requiredIngredients = contest.RequiredIngredients
-                            .Split(new[] {',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(word => word.Trim().ToLower())
-                            .ToList();
-
-                        var recipeIngredients = recipe.IngredientsList
-                            .Split(new[] { ',', ';', '—','.' }, StringSplitOptions.RemoveEmptyEntries) // Додаємо '—' як роздільник
-                            .Select(word => word.Trim().ToLower().Split(' ')[0]) // Беремо тільки перше слово (щоб "імбир - 1шт" стало "імбир")
-                            .ToList();
-
-                        // Перевіряємо, чи кожне слово з requiredIngredients міститься хоча б в одному з recipeIngredients
-                        bool allFound = requiredIngredients.All(req => recipeIngredients.Any(ri => ri.Contains(req)));
-
-                        if (!allFound)
-                            continue; // Пропускаємо цей конкурс, якщо не всі інгредієнти знайдено
-                    }
-
-                    availableContests.Add(new ContestDto
+                var availableContests = contests
+                    .Where(contest => IsRecipeEligibleForContest(contest, recipe)) // Використовуємо спільний метод перевірки
+                    .Select(contest => new ContestDto
                     {
                         Id = contest.Id,
                         ContestName = contest.ContestName,
@@ -502,8 +475,7 @@ namespace CityOfRecipes_backend.Services
                             AverageRating = r.AverageRating,
                             ContestRating = r.ContestRating
                         }).ToList()
-                    });
-                }
+                    }).ToList();
 
                 return availableContests;
             }
@@ -520,8 +492,8 @@ namespace CityOfRecipes_backend.Services
         {
             try
             {
-                if(string.IsNullOrWhiteSpace(contestId) ||
-                    string.IsNullOrWhiteSpace(recipeId) || 
+                if (string.IsNullOrWhiteSpace(contestId) ||
+                    string.IsNullOrWhiteSpace(recipeId) ||
                     string.IsNullOrWhiteSpace(userId))
                     throw new ArgumentException("ID конкурсу, ID рецепта та ID користувача не можуть бути порожніми.");
 
@@ -541,33 +513,11 @@ namespace CityOfRecipes_backend.Services
                 if (contest.ContestRecipes.Any(r => r.Id == recipeId))
                     throw new InvalidOperationException("Рецепт вже бере участь у цьому конкурсі.");
 
-                // Перевірка за категорією
-                if (!string.IsNullOrWhiteSpace(contest.CategoryId) && recipe.CategoryId != contest.CategoryId)
-                    throw new InvalidOperationException("Категорія рецепта не відповідає категорії конкурсу.");
+                // Використовуємо спільний метод перевірки відповідності рецепта конкурсу
+                if (!IsRecipeEligibleForContest(contest, recipe))
+                    throw new InvalidOperationException("Рецепт не відповідає умовам конкурсу.");
 
-                // Перевірка обов’язкових інгредієнтів, якщо вони задані
-                if (!string.IsNullOrWhiteSpace(contest.RequiredIngredients))
-                {
-                    // Розбиваємо рядки за комами або крапкою з комою
-                    var requiredIngredients = contest.RequiredIngredients
-                        .Split(new[] { ',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(word => word.Trim().ToLower())
-                        .ToList();
-
-                    var recipeIngredients = recipe.IngredientsList
-                        .Split(new[] { ',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(word => word.Trim().ToLower())
-                        .ToList();
-
-                    // Перевіряємо, чи кожне слово з requiredIngredients міститься хоча б в одному з recipeIngredients
-                    bool allFound = requiredIngredients.All(req => recipeIngredients.Any(ri => ri.Contains(req)));
-
-                    if (!allFound)
-                        throw new InvalidOperationException("Рецепт не містить всі обов’язкові інгредієнти для цього конкурсу.");
-                }
-
-                // Забезпечуємо, що поле ContestRating для рецепта починається з 0,
-                // щоб підрахунок конкурсних балів був чесним
+                // Забезпечуємо, що поле ContestRating для рецепта починається з 0
                 recipe.ContestRating = 0;
 
                 // Додаємо рецепт до конкурсу
@@ -583,6 +533,44 @@ namespace CityOfRecipes_backend.Services
             {
                 throw new InvalidOperationException($"Помилка додавання рецепта до конкурсу: {ex.Message}");
             }
+        }
+
+        private List<string> ExtractWords(string input)
+        {
+            // Знаходимо всі послідовності літер (юнікодні символи)
+            var matches = Regex.Matches(input, @"\p{L}+");
+            return matches.Cast<Match>()
+                          .Select(m => m.Value.ToLower())
+                          .ToList();
+        }
+
+        // Метод для перевірки відповідності рецепта конкурсу
+        private bool IsRecipeEligibleForContest(Contest contest, Recipe recipe)
+        {
+            // Перевірка за категорією
+            if (!string.IsNullOrWhiteSpace(contest.CategoryId) && recipe.CategoryId != contest.CategoryId)
+                return false;
+
+            // Якщо задані обов’язкові інгредієнти
+            if (!string.IsNullOrWhiteSpace(contest.RequiredIngredients))
+            {
+                // Розбиваємо рядок з потрібними інгредієнтами (наприклад, "борошно, яйця")
+                var requiredIngredients = contest.RequiredIngredients
+                    .Split(new[] { ',', ';', '—', '.' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(word => word.Trim().ToLower())
+                    .ToList();
+
+                // Вилучаємо окремі слова з опису інгредієнтів рецепта
+                var recipeWords = ExtractWords(recipe.IngredientsList);
+
+                // Перевіряємо, що кожен обов’язковий інгредієнт міститься хоча б в одному з вилучених слів
+                bool allFound = requiredIngredients.All(req => recipeWords.Any(word => word.Contains(req)));
+
+                if (!allFound)
+                    return false;
+            }
+
+            return true;
         }
 
         // Створити конкурс
