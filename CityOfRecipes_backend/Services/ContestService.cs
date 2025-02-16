@@ -444,8 +444,7 @@ namespace CityOfRecipes_backend.Services
 
                 var now = DateTime.Now;
                 var contests = await _contests.Find(c =>
-                    c.StartDate <= now && c.EndDate >= now &&
-                    !c.ContestRecipes.Any(r => r.Id == recipeId) // Перевіряємо, що рецепт ще не бере участь
+                    c.StartDate <= now && c.EndDate >= now 
                 ).ToListAsync();
 
                 if (contests == null || contests.Count == 0)
@@ -692,11 +691,11 @@ namespace CityOfRecipes_backend.Services
             // Сортуємо кандидатів:
             // 1. За спаданням ContestRating
             // 2. Якщо однаковий – за спаданням AverageRating
-            // 3. Якщо і ці значення однакові – за зростанням дати додавання (CreatedAt)
+            // 3. Якщо і ці значення однакові – за порядком додавання в ContestRecipes
             var topRecipes = candidateRecipes
                 .OrderByDescending(r => r.ContestRating)
                 .ThenByDescending(r => r.AverageRating)
-                .ThenBy(r => r.CreatedAt)  
+                .ThenBy(r => contest.ContestRecipes.FindIndex(c => c.Id == r.Id)) // Порядок у списку
                 .Take(topCount)
                 .ToList();
 

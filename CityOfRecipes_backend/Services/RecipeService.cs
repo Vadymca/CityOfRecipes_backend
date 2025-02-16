@@ -16,6 +16,7 @@ namespace CityOfRecipes_backend.Services
     {
         private readonly IMongoCollection<Recipe> _recipes;
         private readonly IMongoCollection<User> _users;
+        private readonly IMongoCollection<Models.Tag> _tags;
         private readonly IMongoCollection<Category> _categories;
         private readonly TagService _tagService;
         private readonly IngredientService _ingredientService;
@@ -28,6 +29,7 @@ namespace CityOfRecipes_backend.Services
             var database = client.GetDatabase(mongoSettings.Value.DatabaseName);
             _recipes = database.GetCollection<Recipe>("Recipes");
             _users = database.GetCollection<User>("Users");
+            _tags = database.GetCollection<Models.Tag>("Tags");
             _categories = database.GetCollection<Category>("Categories");
             _tagService = tagService;
             _ingredientService = ingredientService;
@@ -652,9 +654,29 @@ namespace CityOfRecipes_backend.Services
                 // Оновлення тегів
                 if (!string.IsNullOrWhiteSpace(updatedData.TagsText))
                 {
-                    var tags = _tagService.ParseTags(updatedData.TagsText);
-                    existingRecipe.Tags = tags;
-                    await _tagService.UpdateGlobalTagsAsync(tags);
+                    var newTags = _tagService.ParseTags(updatedData.TagsText);
+                    var oldTags = existingRecipe.Tags ?? new List<string>();
+
+                    existingRecipe.Tags = newTags;
+                    await _tagService.UpdateGlobalTagsAsync(newTags);
+
+                    // 🔹 Знаходимо теги, які були видалені
+                    var removedTags = oldTags.Except(newTags).ToList();
+
+                    foreach (var tag in removedTags)
+                    {
+                        // 🔹 Зменшуємо UsageCount у базі
+                        var update = Builders<Models.Tag>.Update.Inc(t => t.UsageCount, -1);
+                        await _tags.UpdateOneAsync(t => t.TagName == tag, update);
+
+                        // 🔹 Перевіряємо, чи UsageCount став 0
+                        var tagData = await _tags.Find(t => t.TagName == tag).FirstOrDefaultAsync();
+                        if (tagData != null && tagData.UsageCount <= 0)
+                        {
+                            // Видаляємо тег, якщо він більше не використовується
+                            await _tags.DeleteOneAsync(t => t.TagName == tag);
+                        }
+                    }
                 }
 
                 // Оновлення інгредієнтів
@@ -739,6 +761,9 @@ namespace CityOfRecipes_backend.Services
                     throw new InvalidOperationException("Цей рецепт брав участь у конкурсі та не може бути видалений.");
                 }
 
+                // 🔹 Отримуємо теги рецепта перед видаленням
+                var tagsToUpdate = existingRecipe.Tags ?? new List<string>();
+
                 // Видалення рецепта
                 var filter = Builders<Recipe>.Filter.Eq(r => r.Id, recipeId);
                 var result = await _recipes.DeleteOneAsync(filter);
@@ -746,6 +771,20 @@ namespace CityOfRecipes_backend.Services
                 if (result.DeletedCount == 0)
                 {
                     throw new InvalidOperationException($"Не вдалося видалити рецепт з ID {recipeId}.");
+                }
+
+                // 🔹 Оновлення UsageCount для тегів
+                foreach (var tag in tagsToUpdate)
+                {
+                    var update = Builders<Models.Tag>.Update.Inc(t => t.UsageCount, -1);
+                    await _tags.UpdateOneAsync(t => t.TagName == tag, update);
+
+                    // Перевіряємо, чи тег більше не використовується
+                    var tagData = await _tags.Find(t => t.TagName == tag).FirstOrDefaultAsync();
+                    if (tagData != null && tagData.UsageCount <= 0)
+                    {
+                        await _tags.DeleteOneAsync(t => t.TagName == tag);
+                    }
                 }
             }
             catch (Exception ex)
