@@ -444,7 +444,8 @@ namespace CityOfRecipes_backend.Services
 
                 var now = DateTime.Now;
                 var contests = await _contests.Find(c =>
-                    c.StartDate <= now && c.EndDate >= now 
+                    c.StartDate <= now && c.EndDate >= now &&
+                    !c.ContestRecipes.Any(r => r.Id == recipeId) // Перевіряємо, що рецепт ще не бере участь
                 ).ToListAsync();
 
                 if (contests == null || contests.Count == 0)
